@@ -1,0 +1,3 @@
+*.tif
+research/*
+*.ipynb_checkpoints
