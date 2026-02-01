@@ -104,7 +104,6 @@ export default function Dashboard() {
           const vegetated = crops + trees + rangeland;
 
           combined.push({
-            name: year,
             Mean_ET: et.mean,
             P25_ET: et.p25,
             P75_ET: et.p75,
@@ -153,7 +152,7 @@ export default function Dashboard() {
               <XAxis dataKey="name" />
               <YAxis label={{ value: 'Percentage Coverage (%)', angle: -90, position: 'insideLeft' }} />
               <Tooltip 
-                formatter={(value: number) => [`${value.toFixed(1)}%`, '']}
+                formatter={(value: number | undefined) => [`${Number(value || 0).toFixed(1)}%`, '']}
                 contentStyle={{ borderRadius: '8px' }}
               />
               <Legend />
@@ -192,9 +191,11 @@ export default function Dashboard() {
 
               <Tooltip 
                 contentStyle={{ borderRadius: '8px' }}
-                formatter={(value: number, name: string) => {
-                  if (name.includes('ET')) return [`${value.toFixed(1)} kg/m²`, name];
-                  return [`${value.toFixed(1)}%`, name];
+                formatter={(value: number | undefined, name: string | undefined) => {
+                  const val = Number(value || 0);
+                  const n = String(name || '');
+                  if (n.includes('ET')) return [`${val.toFixed(1)} kg/m²`, n];
+                  return [`${val.toFixed(1)}%`, n];
                 }}
               />
               <Legend wrapperStyle={{ paddingTop: '20px' }} />
