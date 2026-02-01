@@ -1,0 +1,17 @@
+{
+  "name": "Lake Malawi Development",
+  "short_name": "Malawi Dev",
+  "description": "RL-Driven Sustainable Land-Use Allocation for the Lake Malawi Basin",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/glob.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable any"
+    }
+  ]
+}

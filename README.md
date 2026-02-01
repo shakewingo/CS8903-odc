@@ -1,6 +1,4 @@
-## 1. Environment Setup
-
-To run the notebooks and the application:
+## 1. Running the Notebooks
 
 First, check if Conda is installed:
 ```bash
@@ -15,11 +13,19 @@ conda activate cs8903
 pip install -r requirements.txt
 ```
 
-## 2. Running the Streamlit App
+## 2. Running the Web Application (Next.js)
 
-To run the Streamlit dashboard locally, execute the following command from the project root:
+To run the web application locally:
+
+1. Execute below in terminal
+   ```bash
+   cd web-app && npm install && npm run dev
+   ```
+4. Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+To build and test the application (including Lighthouse audit):
 
 ```bash
-streamlit run app.py
+npm run build
+npm run lighthouse
 ```
-Note that this is not a PWA web applications yet, and will be modified in the future to meet course requirements.
