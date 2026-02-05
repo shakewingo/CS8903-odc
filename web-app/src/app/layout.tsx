@@ -16,6 +16,10 @@ export const metadata: Metadata = {
   title: "Lake Malawi Development",
   description: "RL-Driven Sustainable Land-Use Allocation",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/globe.svg",
+    apple: "/icon-192.png",
+  },
 };
 
 export const viewport = {
