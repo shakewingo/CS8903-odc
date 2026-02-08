@@ -1,0 +1,103 @@
+{
+  "year": 2024,
+  "description": "Fractional-weighted mean MODIS ET (kg/m\u00b2/year) per Sentinel-2 land cover class, 25km Lake Malawi buffer",
+  "method": "Binary LC masks reprojected to MODIS grid via average resampling (strip-based, parallel), then weighted aggregation",
+  "classes": {
+    "1": {
+      "label": "Water",
+      "color": "#419bdf",
+      "weighted_mean_et": 616.93,
+      "weighted_std_et": 175.07,
+      "weighted_p25_et": 494.7,
+      "weighted_p75_et": 724.4,
+      "min_et": 183.0,
+      "max_et": 1829.1,
+      "total_fraction": 737.22,
+      "n_modis_pixels": 5090
+    },
+    "2": {
+      "label": "Trees",
+      "color": "#397d49",
+      "weighted_mean_et": 933.57,
+      "weighted_std_et": 175.95,
+      "weighted_p25_et": 816.9,
+      "weighted_p75_et": 1031.3,
+      "min_et": 183.0,
+      "max_et": 1905.9,
+      "total_fraction": 48724.04,
+      "n_modis_pixels": 93396
+    },
+    "4": {
+      "label": "Flooded",
+      "color": "#7a87c6",
+      "weighted_mean_et": 767.62,
+      "weighted_std_et": 194.14,
+      "weighted_p25_et": 638.8,
+      "weighted_p75_et": 888.7,
+      "min_et": 183.0,
+      "max_et": 1829.1,
+      "total_fraction": 1052.42,
+      "n_modis_pixels": 2885
+    },
+    "5": {
+      "label": "Crops",
+      "color": "#e49635",
+      "weighted_mean_et": 675.66,
+      "weighted_std_et": 160.47,
+      "weighted_p25_et": 554.2,
+      "weighted_p75_et": 779.5,
+      "min_et": 183.0,
+      "max_et": 1905.9,
+      "total_fraction": 14788.02,
+      "n_modis_pixels": 33919
+    },
+    "7": {
+      "label": "Built Area",
+      "color": "#c4281b",
+      "weighted_mean_et": 648.95,
+      "weighted_std_et": 162.83,
+      "weighted_p25_et": 535.0,
+      "weighted_p75_et": 747.8,
+      "min_et": 183.0,
+      "max_et": 1687.1,
+      "total_fraction": 5736.72,
+      "n_modis_pixels": 21715
+    },
+    "8": {
+      "label": "Bare Ground",
+      "color": "#a59b8f",
+      "weighted_mean_et": 591.53,
+      "weighted_std_et": 132.28,
+      "weighted_p25_et": 510.3,
+      "weighted_p75_et": 660.7,
+      "min_et": 306.0,
+      "max_et": 1226.5,
+      "total_fraction": 14.17,
+      "n_modis_pixels": 514
+    },
+    "10": {
+      "label": "Clouds",
+      "color": "#616161",
+      "weighted_mean_et": 845.87,
+      "weighted_std_et": 111.79,
+      "weighted_p25_et": 775.3,
+      "weighted_p75_et": 920.4,
+      "min_et": 527.0,
+      "max_et": 1393.4,
+      "total_fraction": 1.88,
+      "n_modis_pixels": 273
+    },
+    "11": {
+      "label": "Rangeland",
+      "color": "#e3e2c3",
+      "weighted_mean_et": 745.94,
+      "weighted_std_et": 151.79,
+      "weighted_p25_et": 636.0,
+      "weighted_p75_et": 839.9,
+      "min_et": 183.0,
+      "max_et": 1833.8,
+      "total_fraction": 69503.7,
+      "n_modis_pixels": 116755
+    }
+  }
+}
