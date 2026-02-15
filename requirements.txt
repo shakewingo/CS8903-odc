@@ -13,3 +13,5 @@ streamlit>=1.30.0
 tensorboard==2.20.0
 stable-baselines3==2.7.1
 gymnasium==1.2.3
+gymnasium[other]
+gymnasium[classic-control]
