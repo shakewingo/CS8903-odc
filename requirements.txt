@@ -15,3 +15,5 @@ stable-baselines3==2.7.1
 gymnasium==1.2.3
 gymnasium[other]
 gymnasium[classic-control]
+stable-baselines3[extra]
+scikit-learn==1.8.0

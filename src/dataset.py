@@ -13,6 +13,7 @@ Samples are non-overlapping 10×10 cell blocks split 70/30 into
 train / test.
 """
 
+import fractions
 from pathlib import Path
 
 import numpy as np
@@ -52,7 +53,7 @@ def build_grid(center, **grid_kwargs):
         center_lat=center[0], center_lon=center[1], **kw
     )
 
-    fractions = np.zeros((n_rows, n_cols, N_CLASSES), dtype=np.float32)
+    pixel_counts = np.zeros((n_rows, n_cols, N_CLASSES), dtype=np.int32)
     eco_values = np.full((n_rows, n_cols), np.nan, dtype=np.float32)
     et_values = np.full((n_rows, n_cols), np.nan, dtype=np.float32)
     valid_mask = np.zeros((n_rows, n_cols), dtype=bool)
@@ -73,11 +74,11 @@ def build_grid(center, **grid_kwargs):
             coords[r, c, 1] = eco_cell["center_lon"]
 
             for class_id, frac in eco_cell["breakdown"]:
-                fractions[r, c, class_id] = frac
+                pixel_counts[r, c, class_id] = round(frac * N_PIXELS_PER_CELL)
 
     n_valid = int(valid_mask.sum())
     logger.info(f"Valid cells: {n_valid} / {n_rows * n_cols}")
-    return fractions, eco_values, et_values, valid_mask, coords
+    return pixel_counts, eco_values, et_values, valid_mask, coords
 
 
 def normalize_and_compute_rewards(eco_values, et_values, valid_mask):
@@ -171,7 +172,7 @@ def split_dataset(
 
 
 def save_dataset(
-    fractions,
+    pixel_counts,
     eco_values,
     et_values,
     rewards,
@@ -190,13 +191,13 @@ def save_dataset(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     npz_path = output_dir / "rl_dataset.npz"
-
+ 
     np.savez_compressed(
         npz_path,
-        fractions=fractions,
+        pixel_counts=pixel_counts,
         eco_values=eco_values,
         et_values=et_values,
-        rewards=rewards,
+        rewards=rewards,  # TODO: remove non-useful rewards and norm_stats
         valid_mask=valid_mask,
         coords=coords,
         norm_stats=np.array(
@@ -212,7 +213,7 @@ def save_dataset(
     )
 
     logger.info(f"Dataset saved to {npz_path}")
-    logger.info(f"  fractions:     {fractions.shape}")
+    logger.info(f"  pixel_counts:  {pixel_counts.shape}")
     logger.info(f"  eco_values:    {eco_values.shape}")
     logger.info(f"  et_values:     {et_values.shape}")
     logger.info(f"  rewards:       {rewards.shape}")
@@ -221,7 +222,7 @@ def save_dataset(
     return npz_path
 
 if __name__ == "__main__":
-    fractions, eco_values, et_values, valid_mask, coords = build_grid(CENTER, **GRID_KWARGS)
+    pixel_counts, eco_values, et_values, valid_mask, coords = build_grid(CENTER, **GRID_KWARGS)
 
     rewards, norm_stats = normalize_and_compute_rewards(
         eco_values, et_values, valid_mask
@@ -234,7 +235,7 @@ if __name__ == "__main__":
     )
 
     save_dataset(
-        fractions, eco_values, et_values, rewards,
+        pixel_counts, eco_values, et_values, rewards,
         valid_mask, coords, norm_stats,
         train_idx, test_idx,
     )

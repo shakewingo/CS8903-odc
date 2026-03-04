@@ -50,7 +50,7 @@ PROTECTED_CLASSES = frozenset({1, 3, 4, 6, 9, 10})  # Water, Flooded, Snow/Ice, 
 
 # Training params setup
 CENTER = (-13.934564, 34.542859)
-N_CLASSES = max(LAND_COVER_LABELS.keys()) + 1
+N_CLASSES = max(LAND_COVER_LABELS.keys()) + 1  # 12 classes (0-11), where rest is unused
 GRID_KWARGS = {
     "year": 2024,
     "sample_rate": 0.1,
@@ -58,6 +58,7 @@ GRID_KWARGS = {
     "n_rows": 50, # 50*50 cells as total area
     "n_cols": 50,
 }
+N_PIXELS_PER_CELL  = GRID_KWARGS['grid_size'] ** 2
 SAMPLE_SIZE = 10  # 10×10 cells per sample
 TRAIN_RATIO = 0.7
 SEED = 42

@@ -1,6 +1,8 @@
 import logging
 import sys
-
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+from typing import Dict
 
 def get_logger(name: str = "cs8903", level: str = "INFO") -> logging.Logger:
     """
@@ -24,3 +26,14 @@ def get_logger(name: str = "cs8903", level: str = "INFO") -> logging.Logger:
 
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
     return logger
+
+def minmax_normalize(data: Dict) -> Dict:
+    """MinMax normalization for Dict of values"""
+    scaler = MinMaxScaler()
+    
+    keys = list(data.keys())
+    values_2d = np.array(list(data.values())).reshape(-1, 1)
+    
+    scaled_values = scaler.fit_transform(values_2d).flatten()
+    
+    return {k: round(float(v), 4) for k, v in zip(keys, scaled_values)}

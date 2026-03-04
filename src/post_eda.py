@@ -997,7 +997,7 @@ def compute_economic_grid(center_lat, center_lon, **kwargs):
     )
 
 
-def plot_economic_heatmap(grid, meta, **kwargs):
+def plot_economic_heatmap(grid, meta):
     """Plot economic-value heatmap."""
     plot_value_heatmap(
         grid,
@@ -1006,7 +1006,6 @@ def plot_economic_heatmap(grid, meta, **kwargs):
         unit="Economic Value (USD/ha/yr)",
         cmap_colors=["#e8f5e9", "#ffffcc", "#ffccbc", "#ef5350", "#b71c1c"],
         filename="economic_heatmap_{year}.png",
-        **kwargs,
     )
 
 
@@ -1031,7 +1030,7 @@ def compute_et_grid(center_lat, center_lon, year=2024, **kwargs):
     )
 
 
-def plot_et_heatmap(grid, meta, **kwargs):
+def plot_et_heatmap(grid, meta):
     """Plot ET-value heatmap."""
     plot_value_heatmap(
         grid,
@@ -1040,7 +1039,6 @@ def plot_et_heatmap(grid, meta, **kwargs):
         unit="ET (kg/m²/yr)",
         cmap_colors=["#fff7e6", "#fee8c8", "#fdbb84", "#e34a33", "#7a0177"],
         filename="et_heatmap_{year}.png",
-        **kwargs,
     )
 
 
@@ -1048,7 +1046,7 @@ if __name__ == "__main__":
     # get_et_per_landcover(year=2024)
     # find_most_diverse_grids(year=2024, sample_rate=0.1, grid_size=5, top_n=10)
 
-    # look into the most diverse grids
+    # # look into the most diverse grids
     # top_distributed_grid = get_landcover_block_at_latlon(year=2024, center_lat=-12.580513, center_lon=34.170748, grid_size=5)
     # print(np.array2string(np.array(top_distributed_grid["raw_data"]), separator=", "))
 
