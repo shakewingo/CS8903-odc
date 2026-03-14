@@ -20,8 +20,8 @@ from rasterio.windows import Window
 from shapely.geometry import shape
 from shapely.ops import transform
 
-from config import LAND_COVER_LABELS, LAND_COVER_COLORS, ECONOMIC_VALUES, data_dir
-from utils import get_logger
+from src.config import LAND_COVER_LABELS, LAND_COVER_COLORS, ECONOMIC_VALUES, data_dir
+from src.utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -1040,6 +1040,160 @@ def plot_et_heatmap(grid, meta):
         cmap_colors=["#fff7e6", "#fee8c8", "#fdbb84", "#e34a33", "#7a0177"],
         filename="et_heatmap_{year}.png",
     )
+
+
+def plot_state_heatmap(
+    state,
+    value_per_class,
+    title="State Heatmap",
+    unit="Value",
+    cmap_colors=None,
+    save_path=None,
+    ax=None,
+):
+    """Render a 2-D state grid as a heatmap with per-cell land-cover bars.
+
+    Parameters
+    ----------
+    state : ndarray, shape (n_rows, n_cols, N_CLASSES)
+        Fraction (or pixel-count) array.  Values are normalised internally
+        so both raw counts and [0,1] fractions work.
+    value_per_class : ndarray, shape (N_CLASSES,)
+        Per-class value vector.  ``total_value = state[r,c,:] @ value_per_class``.
+    title : str
+        Plot title.
+    unit : str
+        Colour-bar label.
+    cmap_colors : list[str] | None
+        Colour stops for the background map (defaults to green→red economic palette).
+    save_path : str | Path | None
+        If given, save the figure to this path.
+    ax : matplotlib Axes | None
+        If provided, draw on this axes (useful for side-by-side comparisons).
+        When *ax* is given the caller is responsible for ``plt.show()`` / saving.
+
+    Returns
+    -------
+    fig, ax
+    """
+    import matplotlib.colors as mcolors
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Rectangle
+
+    if cmap_colors is None:
+        cmap_colors = ["#e8f5e9", "#ffffcc", "#ffccbc", "#ef5350", "#b71c1c"]
+
+    state = np.asarray(state, dtype=np.float32)
+    n_rows, n_cols, n_cls = state.shape
+
+    # Normalise to fractions if raw pixel counts (sum > 1)
+    row_sums = state.sum(axis=-1, keepdims=True)
+    row_sums = np.where(row_sums == 0, 1.0, row_sums)
+    fractions = state / row_sums
+
+    # Compute per-cell total value
+    value_per_class = np.asarray(value_per_class, dtype=np.float32)
+    values = fractions @ value_per_class  # (n_rows, n_cols)
+
+    vmin, vmax = float(values.min()), float(values.max())
+    if vmin == vmax:
+        vmax = vmin + 1.0
+
+    cmap = mcolors.LinearSegmentedColormap.from_list("val", cmap_colors)
+    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+
+    own_fig = ax is None
+    cell_w, cell_h = 1.0, 1.0
+    if own_fig:
+        fig_w = n_cols * cell_w * 0.6 + 2.5
+        fig_h = n_rows * cell_h * 0.6 + 1.0
+        fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    else:
+        fig = ax.get_figure()
+
+    bar_height_frac = 0.30
+    bar_y_offset = 0.10
+
+    for gr in range(n_rows):
+        for gc in range(n_cols):
+            x0 = gc * cell_w
+            y0 = (n_rows - 1 - gr) * cell_h
+            val = float(values[gr, gc])
+            bg_color = cmap(norm(val))
+
+            ax.add_patch(
+                Rectangle(
+                    (x0, y0), cell_w, cell_h,
+                    facecolor=bg_color, edgecolor="grey", linewidth=0.5,
+                )
+            )
+
+            # Stacked horizontal bar for land-cover proportions
+            frac_vec = fractions[gr, gc]
+            # Sort by fraction descending for visual clarity
+            order = np.argsort(-frac_vec)
+            bar_y = y0 + bar_y_offset * cell_h
+            bar_h = bar_height_frac * cell_h
+            bar_x = x0 + 0.05 * cell_w
+            bar_total_w = 0.90 * cell_w
+            cursor = bar_x
+            for cls_id in order:
+                frac = float(frac_vec[cls_id])
+                if frac <= 0:
+                    continue
+                seg_w = frac * bar_total_w
+                ax.add_patch(
+                    Rectangle(
+                        (cursor, bar_y), seg_w, bar_h,
+                        facecolor=LAND_COVER_COLORS.get(int(cls_id), "#000000"),
+                        edgecolor="none",
+                    )
+                )
+                cursor += seg_w
+
+            # Value label
+            label_color = "white" if norm(val) > 0.6 else "black"
+            ax.text(
+                x0 + cell_w / 2, y0 + cell_h * 0.72,
+                f"{val:.2f}",
+                ha="center", va="center",
+                fontsize=7, fontweight="bold", color=label_color,
+            )
+
+    ax.set_xlim(0, n_cols * cell_w)
+    ax.set_ylim(0, n_rows * cell_h)
+    ax.set_aspect("equal")
+    ax.axis("off")
+    ax.set_title(title, fontsize=12, fontweight="bold", pad=12)
+
+    # Colour bar
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02)
+    cbar.set_label(unit, fontsize=9)
+
+    # Land-cover legend
+    legend_handles = [
+        Line2D(
+            [0], [0], marker="s", color="w",
+            markerfacecolor=color, markersize=7,
+            label=LAND_COVER_LABELS.get(cls, f"Class {cls}"),
+        )
+        for cls, color in sorted(LAND_COVER_COLORS.items())
+        if cls in LAND_COVER_LABELS
+    ]
+    ax.legend(
+        handles=legend_handles, title="Land Cover",
+        loc="upper left", bbox_to_anchor=(1.08, 1.0),
+        fontsize=6, title_fontsize=7, frameon=True,
+    )
+
+    plt.tight_layout()
+    if save_path is not None:
+        fig.savefig(save_path, dpi=200, bbox_inches="tight")
+        logger.info(f"State heatmap saved to {save_path}")
+
+    return fig, ax
 
 
 if __name__ == "__main__":

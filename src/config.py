@@ -49,7 +49,11 @@ PROTECTED_CLASSES = frozenset({1, 3, 4, 6, 9, 10})  # Water, Flooded, Snow/Ice, 
 
 
 # Training params setup
-CENTER = (-13.934564, 34.542859)
+# Northern Boundary (Max Latitude): -13.822144
+# Southern Boundary (Min Latitude): -14.046984
+# Eastern Boundary (Max Longitude): 34.658687
+# Western Boundary (Min Longitude): 34.427031
+CENTER = (-13.934564, 34.542859) 
 N_CLASSES = max(LAND_COVER_LABELS.keys()) + 1  # 12 classes (0-11), where rest is unused
 GRID_KWARGS = {
     "year": 2024,

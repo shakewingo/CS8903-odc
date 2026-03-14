@@ -20,7 +20,7 @@ import numpy as np
 
 from config import *
 from utils import get_logger
-from post_eda import compute_economic_grid, compute_et_grid
+from src.post_eda import compute_economic_grid, compute_et_grid
 
 logger = get_logger(__name__)
 
@@ -74,6 +74,7 @@ def build_grid(center, **grid_kwargs):
             coords[r, c, 1] = eco_cell["center_lon"]
 
             for class_id, frac in eco_cell["breakdown"]:
+                # TODO: not consider pixel position but only counts
                 pixel_counts[r, c, class_id] = round(frac * N_PIXELS_PER_CELL)
 
     n_valid = int(valid_mask.sum())
