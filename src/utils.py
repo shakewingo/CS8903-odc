@@ -4,7 +4,7 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from typing import Dict
 
-def get_logger(name: str = "cs8903", level: str = "INFO") -> logging.Logger:
+def get_logger(name: str = "cs8903", level: str = "INFO", log_file: str = None, stream: bool = True) -> logging.Logger:
     """
     Get a configured logger.
 
@@ -12,17 +12,27 @@ def get_logger(name: str = "cs8903", level: str = "INFO") -> logging.Logger:
         name:  Logger name (shows in log output). Use __name__ in scripts,
                or a descriptive string like "landcover" in notebooks.
         level: Logging level — "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL".
+        log_file: Optional file path to also write logs to.
+        stream: Whether to log to stdout. Set False to log only to file.
     """
     logger = logging.getLogger(name)
+    # Clear existing handlers to allow reconfiguration (e.g. notebook re-runs)
+    logger.handlers.clear()
 
-    if not logger.handlers:
-        handler = logging.StreamHandler(sys.stdout)
-        formatter = logging.Formatter(
-            fmt="%(asctime)s | %(name)s | %(levelname)-7s | %(message)s",
-            datefmt="%H:%M:%S",
-        )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
+    formatter = logging.Formatter(
+        fmt="%(asctime)s | %(name)s | %(levelname)-7s | %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    if stream:
+        stream_handler = logging.StreamHandler(sys.stdout)
+        stream_handler.setFormatter(formatter)
+        logger.addHandler(stream_handler)
+
+    if log_file:
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
 
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
     return logger

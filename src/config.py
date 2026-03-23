@@ -45,8 +45,7 @@ ECONOMIC_VALUES = {
 }
 
 # Land-cover classes that cannot be modified by the RL agent
-PROTECTED_CLASSES = frozenset({1, 3, 4, 6, 9, 10})  # Water, Flooded, Snow/Ice, Clouds
-
+PROTECTED_CLASSES = frozenset({0, 1, 3, 4, 6, 9, 10})  # Water, Flooded, Snow/Ice, Clouds
 
 # Training params setup
 # Northern Boundary (Max Latitude): -13.822144

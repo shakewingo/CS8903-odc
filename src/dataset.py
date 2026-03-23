@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 
 from config import *
-from utils import get_logger
+from src.utils import get_logger
 from src.post_eda import compute_economic_grid, compute_et_grid
 
 logger = get_logger(__name__)
