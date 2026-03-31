@@ -30,19 +30,34 @@ LAND_COVER_COLORS = {
     11: '#e3e2c3',
 }
 
-# Average economic value per land-cover class (USD / ha / year)
-# Sources: SeedCo Malawi, MwAPATA Institute, ecosystem-service valuations
-ECONOMIC_VALUES = {
-    1:  554,    # Water        – fisheries + ecosystem services
-    2:  325,    # Trees/Forest – firewood, carbon, water regulation
-    4:  554,    # Flooded/Wetlands – same as water/wetlands valuation
-    5:  400,    # Crops        – rainfed maize midpoint ($300-$500)
-    7:  2000,   # Built Area   – urban real-estate (constraint: very high)
-    8:  25,     # Bare Ground  – minimal value
-    9:  0,      # Snow/Ice     – no economic value
-    10: 0,      # Clouds       – no economic value (masked)
-    11: 75,     # Rangeland    – low-intensity grazing
+# Extracted from data/processed/et_per_landcover_2024.json
+ET_VALUES = {
+    1:  616.93,   # Water
+    2:  933.57,   # Trees
+    4:  767.62,   # Flooded
+    5:  675.66,   # Crops
+    7:  648.95,   # Built Area
+    8:  591.53,   # Bare Ground
+    9:  0,        # Snow/Ice     – no data
+    10: 845.87,   # Clouds
+    11: 745.94,   # Rangeland
 }
+
+# Economic value per land-cover class (USD / ha / year)
+# Costanza 2014 ratios scaled to Malawi anchor (Zuze 2013: Lake Chiuta wetland $554/ha/yr)
+ECO_VALUES = {
+    1:  554,    # Water (Lakes/Rivers)  – anchor value, ratio 1.00
+    2:  238,    # Trees (Tropical Forest) – ratio 0.43
+    4:  1136,   # Flooded (Inland Wetlands) – ratio 2.05
+    5:  246,    # Crops (Cropland) – ratio 0.44
+    7:  295,    # Built Area (Urban) – ratio 0.53
+    8:  0,      # Bare Ground (Desert) – ~0
+    9:  0,      # Snow/Ice – no economic value
+    10: 0,      # Clouds – no economic value (masked)
+    11: 184,    # Rangeland (Grass/Rangelands) – ratio 0.33
+}
+
+
 
 # Land-cover classes that cannot be modified by the RL agent
 PROTECTED_CLASSES = frozenset({0, 1, 3, 4, 6, 9, 10})  # Water, Flooded, Snow/Ice, Clouds

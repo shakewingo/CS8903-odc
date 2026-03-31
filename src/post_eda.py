@@ -20,7 +20,7 @@ from rasterio.windows import Window
 from shapely.geometry import shape
 from shapely.ops import transform
 
-from src.config import LAND_COVER_LABELS, LAND_COVER_COLORS, ECONOMIC_VALUES, data_dir
+from src.config import LAND_COVER_LABELS, LAND_COVER_COLORS, ECO_VALUES, data_dir
 from src.utils import get_logger
 
 logger = get_logger(__name__)
@@ -991,7 +991,7 @@ def compute_economic_grid(center_lat, center_lon, **kwargs):
     return compute_value_grid(
         center_lat,
         center_lon,
-        value_map=ECONOMIC_VALUES,
+        value_map=ECO_VALUES,
         value_key="economic_value",
         **kwargs,
     )
