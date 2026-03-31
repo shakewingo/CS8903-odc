@@ -3,27 +3,26 @@
 Train a MaskablePPO agent for land-use allocation optimization.
 
 Usage examples:
-    # Default config
+    # Default config (all spatial rewards active)
     python src/train.py
 
     # Quick test run
     python src/train.py --total-timesteps 10000 --max-steps 100
 
-    # Sweep spatial reward weights
-    python src/train.py --lambda-cont 0.1 --lambda-buf 0.1
+    # Adjust spatial vs eco balance
+    python src/train.py --spatial-scale 0.2
 
-    # Disable spatial reward
-    python src/train.py --no-spatial-reward
+    # Tree contiguity only (ablation)
+    python src/train.py --w-tree 3.0 --w-crop 0 --w-built 0 --w-buf 0
+
+    # Disable all spatial rewards
+    python src/train.py --spatial-scale 0
 
     # Larger CNN
     python src/train.py --features-out 256 --conv1-out 64 --conv2-out 128
 
     # Disable wandb
     python src/train.py --no-wandb
-
-    # Disable both (equivalent to old --no-spatial-reward)
-    python src/train.py --no-contiguity-reward --no-buffer-penalty
-
 """
 
 import argparse
@@ -67,7 +66,7 @@ def parse_args():
     ppo.add_argument("--n-steps", type=int, default=2048)
     ppo.add_argument("--batch-size", type=int, default=128)
     ppo.add_argument("--n-epochs", type=int, default=10)
-    ppo.add_argument("--learning-rate", type=float, default=3e-4)
+    ppo.add_argument("--learning-rate", type=float, default=1e-4)
     ppo.add_argument("--gamma", type=float, default=0.99)
     ppo.add_argument("--gae-lambda", type=float, default=0.95)
     ppo.add_argument("--clip-range", type=float, default=0.2)
@@ -89,19 +88,21 @@ def parse_args():
     env_g.add_argument("--min-mod-frac", type=float, default=0.1,
                        help="Minimum modifiable fraction to accept a sample")
 
-    # Reward shaping
+    # Reward shaping — spatial rewards normalized by grid max contiguity
     rwd = p.add_argument_group("Reward")
-    rwd.add_argument("--lambda-cont", type=float, default=0.05,
-                     help="Weight for tree contiguity bonus")
-    rwd.add_argument("--lambda-buf", type=float, default=0.05,
-                     help="Weight for water-buffer penalty")
+    rwd.add_argument("--spatial-scale", type=float, default=1.0,
+                     help="Overall spatial reward scale (0 = disable all spatial)")
+    rwd.add_argument("--w-tree", type=float, default=1.0,
+                     help="Priority weight for tree contiguity bonus (high)")
+    rwd.add_argument("--w-crop", type=float, default=3.0,
+                     help="Priority weight for crop contiguity bonus (medium)")
+    rwd.add_argument("--w-built", type=float, default=3.0,
+                     help="Priority weight for built-area contiguity bonus (medium)")
+    rwd.add_argument("--w-buf", type=float, default=5.0,
+                     help="Priority weight for water-buffer penalty (high)")
     rwd.add_argument("--lambda-et", type=float, default=1.0,
                      help="Weight for ET penalty (currently unused)")
     rwd.add_argument("--reward-scale", type=float, default=1.0)
-    rwd.add_argument("--no-contiguity-reward", action="store_true",
-                     help="Disable tree contiguity bonus")
-    rwd.add_argument("--no-buffer-penalty", action="store_true",
-                     help="Disable water-buffer penalty") # if pass args, then it represents args=True
 
     # Network architecture
     net = p.add_argument_group("Network")
@@ -163,6 +164,7 @@ MODIFIABLE_CLASSES = sorted(set(range(N_CLASSES)) - PROTECTED_CLASSES)
 N_MOD = len(MODIFIABLE_CLASSES)
 ECO_MOD = None  # set in main()
 ET_MOD = None
+_KERNEL = np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]])
 
 
 class LandUseEnv(gym.Env):
@@ -171,8 +173,7 @@ class LandUseEnv(gym.Env):
 
     def __init__(self, size=10, max_steps=500,
                  split: Literal["train_indices", "test_indices", "no_split"] = "train_indices",
-                 add_contiguity_reward=True, add_buffer_penalty=True,
-                 lambda_cont=0.5, lambda_buf=2.0,
+                 spatial_scale=1.0, w_tree=3.0, w_crop=1.0, w_built=1.0, w_buf=2.0,
                  lambda_et=1.0, reward_scale=1.0, n_augment=10,
                  et_dcs_tolerance=0.1, min_mod_frac=0.1,
                  pixels_per_transfer=5, max_consecutive_noops=10):
@@ -184,10 +185,11 @@ class LandUseEnv(gym.Env):
         self.data = np.load(Path(data_dir, "processed", "rl_dataset.npz"))
         self.split = split
         self.initial_total_et = 0.0
-        self.add_contiguity_reward = add_contiguity_reward
-        self.add_buffer_penalty = add_buffer_penalty
-        self.lambda_cont = lambda_cont
-        self.lambda_buf = lambda_buf
+        self.spatial_scale = spatial_scale
+        self.w_tree = w_tree # priority level: 10, 1, 0.1
+        self.w_crop = w_crop
+        self.w_built = w_built
+        self.w_buf = w_buf
         self.n_augment = n_augment
         self.et_dcs_tolerance = et_dcs_tolerance
         self.min_mod_frac = min_mod_frac
@@ -223,40 +225,44 @@ class LandUseEnv(gym.Env):
     # ── reward helpers ──────────────────────────────────────────────
     def _compute_total_value(self):
         net_values = self.state * (ECO_MOD + ET_MOD)
-        contiguity_bonus = buffer_penalty = 0.0
-        spatial_reward = 0.0
+        tree_n = crop_n = built_n = buf_n = 0.0
+        spatial_value = 0.0
 
-        if self.add_contiguity_reward or self.add_buffer_penalty:
-            raw_cont, raw_buf = self._compute_spatial_modifiers()
-            if self.add_contiguity_reward:
-                contiguity_bonus = raw_cont
-                spatial_reward += self.lambda_cont * contiguity_bonus
-            if self.add_buffer_penalty:
-                buffer_penalty = raw_buf
-                spatial_reward -= self.lambda_buf * buffer_penalty
+        if self.spatial_scale > 0:
+            tree_n, crop_n, built_n, buf_n = self._compute_spatial_normalized()
+            spatial_value = self.spatial_scale * (
+                + self.w_tree  * tree_n
+                + self.w_crop  * crop_n
+                + self.w_built * built_n
+                - self.w_buf   * buf_n
+            )
 
-        total_values = float(net_values.sum()) + spatial_reward
-        return total_values, spatial_reward, contiguity_bonus, buffer_penalty
+        total_values = float(net_values.sum()) + spatial_value
+        return total_values, spatial_value, tree_n, crop_n, built_n, buf_n
 
     def _compute_total_et(self) -> float:
         return float((self.state.reshape(-1, N_MOD) @ ET_MOD).sum())
 
-    def _compute_spatial_modifiers(self):
-        """Return raw (unweighted) contiguity bonus and buffer penalty."""
+    def _compute_spatial_normalized(self):
+        """Return 4 log1p-transformed spatial metrics."""
         fractions = self.state
-        kernel = np.array([[0, 1, 0],
-                           [1, 0, 1],
-                           [0, 1, 0]])
+
         trees = fractions[:, :, self._mod_idx[2]]
-        tree_neighbors = convolve2d(trees, kernel, mode="same", boundary="fill", fillvalue=0)
-        contiguity_bonus = float(np.sum(trees * tree_neighbors))
+        tree_cont = float(np.sum(trees * convolve2d(trees, _KERNEL, mode="same", boundary="fill", fillvalue=0)))
 
-        water_bodies = self._protected_water
-        high_impact = fractions[:, :, self._mod_idx[5]] + fractions[:, :, self._mod_idx[7]]
-        water_neighbors = convolve2d(water_bodies, kernel, mode="same", boundary="fill", fillvalue=0)
-        buffer_penalty = float(np.sum(high_impact * water_neighbors))
+        crops = fractions[:, :, self._mod_idx[5]]
+        crop_cont = float(np.sum(crops * convolve2d(crops, _KERNEL, mode="same", boundary="fill", fillvalue=0)))
 
-        return contiguity_bonus, buffer_penalty
+        built = fractions[:, :, self._mod_idx[7]]
+        built_cont = float(np.sum(built * convolve2d(built, _KERNEL, mode="same", boundary="fill", fillvalue=0)))
+
+        water = self._protected_water
+        high_impact = crops + built
+        water_nb = convolve2d(water, _KERNEL, mode="same", boundary="fill", fillvalue=0)
+        buffer_pen = float(np.sum(high_impact * water_nb))
+
+        return (np.log1p(tree_cont), np.log1p(crop_cont),
+                np.log1p(built_cont), np.log1p(buffer_pen))
 
     # ── observation ─────────────────────────────────────────────────
     def _get_obs(self, idx) -> np.ndarray:
@@ -291,7 +297,7 @@ class LandUseEnv(gym.Env):
     # ── reset / step ────────────────────────────────────────────────
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        self.samples = augment_data(self.data, size=self.size, seed=seed,
+        self.samples = augment_data(self.data, size=self.size, seed=SEED,
                                     split=self.split, n_augment=self.n_augment)
         n_cells = self.size * self.size
         for _ in range(100):
@@ -303,7 +309,10 @@ class LandUseEnv(gym.Env):
 
         self.step_count = 0
         self.consecutive_noops = 0
-        self.prev_total_value, _, _, _ = self._compute_total_value()
+        tv = self._compute_total_value()
+        self.prev_total_value = tv[0]
+        self.prev_spatial_value = tv[1]
+        self.prev_spatial = (tv[2], tv[3], tv[4], tv[5])
         self.initial_total_et = self._compute_total_et()
         info = {"total_value": self.prev_total_value, "et_decrease": 0.0, "step": self.step_count}
         logger.info(f"Reset env: mod_frac={mod_frac:.2f}, {info}")
@@ -318,9 +327,20 @@ class LandUseEnv(gym.Env):
         else:
             self.consecutive_noops = 0
 
-        cur_total_value, spatial_reward, contiguity_bonus, buffer_penalty = self._compute_total_value()
+        (cur_total_value, spatial_value,
+         tree_cont, crop_cont, built_cont, buffer_pen) = self._compute_total_value()
         reward = cur_total_value - self.prev_total_value
         self.prev_total_value = cur_total_value
+
+        # Per-metric deltas
+        tree_cont_rwd = tree_cont - self.prev_spatial[0]
+        crop_cont_rwd = crop_cont - self.prev_spatial[1]
+        built_cont_rwd = built_cont - self.prev_spatial[2]
+        buffer_pen_rwd = buffer_pen - self.prev_spatial[3]
+        spatial_reward = spatial_value - self.prev_spatial_value
+        self.prev_spatial = (tree_cont, crop_cont, built_cont, buffer_pen)
+        self.prev_spatial_value = spatial_value
+
         self.step_count += 1
 
         et_decrease = (self.initial_total_et - self._compute_total_et()) / (self.initial_total_et + 1e-9)
@@ -334,9 +354,16 @@ class LandUseEnv(gym.Env):
             "total_value": cur_total_value,
             "et_decrease": et_decrease,
             "step": self.step_count,
-            "contiguity_bonus": contiguity_bonus,
-            "buffer_penalty": buffer_penalty,
+            "tree_contiguity": tree_cont,
+            "crop_contiguity": crop_cont,
+            "built_contiguity": built_cont,
+            "buffer_penalty": buffer_pen,
+            "spatial_value": spatial_value,
             "spatial_reward": spatial_reward,
+            "tree_cont_reward": tree_cont_rwd,
+            "crop_cont_reward": crop_cont_rwd,
+            "built_cont_reward": built_cont_rwd,
+            "buffer_pen_reward": buffer_pen_rwd,
         }
         if self.consecutive_noops >= self.max_consecutive_noops:
             logger.info(f"Early termination: {self.max_consecutive_noops} consecutive no-ops "
@@ -377,32 +404,27 @@ class GridCNN(BaseFeaturesExtractor):
 
 # ── WandB Callback ─────────────────────────────────────────────────────
 class SpatialMetricsCallback(BaseCallback):
+    SPATIAL_KEYS = ("tree_contiguity", "crop_contiguity", "built_contiguity",
+                    "buffer_penalty", "spatial_value", "spatial_reward",
+                    "tree_cont_reward", "crop_cont_reward",
+                    "built_cont_reward", "buffer_pen_reward", "et_decrease")
+
     def __init__(self, verbose=0):
         super().__init__(verbose)
-        self.contiguity_buffer = []
-        self.penalty_buffer = []
-        self.et_decrease_buffer = []
+        self._buffers = {k: [] for k in self.SPATIAL_KEYS}
 
     def _on_step(self) -> bool:
         for info in self.locals.get("infos", []):
-            if "contiguity_bonus" in info:
-                self.contiguity_buffer.append(info["contiguity_bonus"])
-            if "buffer_penalty" in info:
-                self.penalty_buffer.append(info["buffer_penalty"])
-            if "et_decrease" in info:
-                self.et_decrease_buffer.append(info["et_decrease"])
+            for k in self.SPATIAL_KEYS:
+                if k in info:
+                    self._buffers[k].append(info[k])
         return True
 
     def _on_rollout_end(self) -> None:
-        if self.contiguity_buffer:
-            self.logger.record("spatial/contiguity_bonus_mean", np.mean(self.contiguity_buffer))
-            self.contiguity_buffer = []
-        if self.penalty_buffer:
-            self.logger.record("spatial/buffer_penalty_mean", np.mean(self.penalty_buffer))
-            self.penalty_buffer = []
-        if self.et_decrease_buffer:
-            self.logger.record("spatial/et_decrease_mean", np.mean(self.et_decrease_buffer))
-            self.et_decrease_buffer = []
+        for k, buf in self._buffers.items():
+            if buf:
+                self.logger.record(f"spatial/{k}_mean", np.mean(buf))
+                buf.clear()
 
 
 # ── Main ───────────────────────────────────────────────────────────────
@@ -466,14 +488,15 @@ def main():
     env = LandUseEnv(
         split="train_indices",
         max_steps=args.max_steps,
-        lambda_cont=args.lambda_cont,
-        lambda_buf=args.lambda_buf,
+        spatial_scale=args.spatial_scale,
+        w_tree=args.w_tree,
+        w_crop=args.w_crop,
+        w_built=args.w_built,
+        w_buf=args.w_buf,
         lambda_et=args.lambda_et,
         reward_scale=args.reward_scale,
         n_augment=args.n_augment,
         et_dcs_tolerance=args.et_dcs_tolerance,
-        add_contiguity_reward=not args.no_contiguity_reward,
-        add_buffer_penalty=not args.no_buffer_penalty,
         min_mod_frac=args.min_mod_frac,
         pixels_per_transfer=args.pixels_per_transfer,
         max_consecutive_noops=args.max_consecutive_noops,

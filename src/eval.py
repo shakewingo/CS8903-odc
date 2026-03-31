@@ -62,18 +62,17 @@ def parse_args():
     # Environment args (should match training)
     env_g = p.add_argument_group("Environment (must match training)")
     env_g.add_argument("--max-steps", type=int, default=500)
-    env_g.add_argument("--lambda-cont", type=float, default=0.05)
-    env_g.add_argument("--lambda-buf", type=float, default=0.05)
+    env_g.add_argument("--spatial-scale", type=float, default=1.0)
+    env_g.add_argument("--w-tree", type=float, default=3.0)
+    env_g.add_argument("--w-crop", type=float, default=1.0)
+    env_g.add_argument("--w-built", type=float, default=1.0)
+    env_g.add_argument("--w-buf", type=float, default=2.0)
     env_g.add_argument("--lambda-et", type=float, default=1.0)
     env_g.add_argument("--reward-scale", type=float, default=1.0)
     env_g.add_argument("--et-dcs-tolerance", type=float, default=1.0)
     env_g.add_argument("--pixels-per-transfer", type=int, default=5)
     env_g.add_argument("--max-consecutive-noops", type=int, default=10)
     env_g.add_argument("--min-mod-frac", type=float, default=0.1)
-    env_g.add_argument("--no-contiguity-reward", action="store_true",
-                       help="Disable tree contiguity bonus")
-    env_g.add_argument("--no-buffer-penalty", action="store_true",
-                       help="Disable water-buffer penalty")
     env_g.add_argument("--use-et", action="store_true",
                        help="Use real ET values from config instead of zeros")
 
@@ -96,14 +95,15 @@ def _make_env(args, split):
     return LandUseEnv(
         split=split,
         max_steps=args.max_steps,
-        lambda_cont=args.lambda_cont,
-        lambda_buf=args.lambda_buf,
+        spatial_scale=args.spatial_scale,
+        w_tree=args.w_tree,
+        w_crop=args.w_crop,
+        w_built=args.w_built,
+        w_buf=args.w_buf,
         lambda_et=args.lambda_et,
         reward_scale=args.reward_scale,
         n_augment=0,
         et_dcs_tolerance=args.et_dcs_tolerance,
-        add_contiguity_reward=not args.no_contiguity_reward,
-        add_buffer_penalty=not args.no_buffer_penalty,
         min_mod_frac=args.min_mod_frac,
         pixels_per_transfer=args.pixels_per_transfer,
         max_consecutive_noops=args.max_consecutive_noops,
@@ -119,7 +119,7 @@ def run_inference(model, env, data, split_key, deterministic=False):
         coord_idx = indices[ep]
         _, _ = env.reset()
         obs = env._get_obs(ep).copy()
-        env.prev_total_value, _, _, _ = env._compute_total_value()
+        env.prev_total_value = env._compute_total_value()[0]
         env.initial_total_et = env._compute_total_et()
 
         total_reward, done = 0.0, False
