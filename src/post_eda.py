@@ -1050,6 +1050,13 @@ def plot_state_heatmap(
     cmap_colors=None,
     save_path=None,
     ax=None,
+    bbox=None,
+    value_range=None,
+    show_legend=True,
+    show_colorbar=True,
+    show_value_labels=True,
+    title_fontsize=12,
+    value_label_fontsize=7,
 ):
     """Render a 2-D state grid as a heatmap with per-cell land-cover bars.
 
@@ -1071,6 +1078,19 @@ def plot_state_heatmap(
     ax : matplotlib Axes | None
         If provided, draw on this axes (useful for side-by-side comparisons).
         When *ax* is given the caller is responsible for ``plt.show()`` / saving.
+    bbox : tuple(int, int, int, int) | None
+        (r0, c0, h, w) — render only the sub-rectangle starting at (r0, c0) of
+        size h×w. When given, axes limits are set to that window in absolute
+        grid coordinates so zoom panels align across calls.
+    value_range : tuple(float, float) | None
+        Explicit (vmin, vmax) for the background colormap. When comparing
+        multiple panels (e.g., the zoom grid), pass a shared range so colors
+        are directly comparable. Defaults to local min/max.
+    show_legend, show_colorbar, show_value_labels : bool
+        Toggle the land-cover legend, ESV colorbar, and per-cell numeric
+        labels respectively. Useful to keep zoom panels uncluttered.
+    title_fontsize, value_label_fontsize : int
+        Font sizes for the panel title and the per-cell value labels.
 
     Returns
     -------
@@ -1095,18 +1115,32 @@ def plot_state_heatmap(
     value_per_class = np.asarray(value_per_class, dtype=np.float32)
     values = fractions @ value_per_class  # (n_rows, n_cols)
 
-    vmin, vmax = float(values.min()), float(values.max())
+    if value_range is not None:
+        vmin, vmax = float(value_range[0]), float(value_range[1])
+    else:
+        vmin, vmax = float(values.min()), float(values.max())
     if vmin == vmax:
         vmax = vmin + 1.0
 
     cmap = mcolors.LinearSegmentedColormap.from_list("val", cmap_colors)
     norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
 
+    # Determine iteration range (full grid or bbox window)
+    if bbox is not None:
+        r0, c0, h, w = bbox
+        r_start, r_end = r0, min(r0 + h, n_rows)
+        c_start, c_end = c0, min(c0 + w, n_cols)
+    else:
+        r_start, r_end = 0, n_rows
+        c_start, c_end = 0, n_cols
+
     own_fig = ax is None
     cell_w, cell_h = 1.0, 1.0
     if own_fig:
-        fig_w = n_cols * cell_w * 0.6 + 2.5
-        fig_h = n_rows * cell_h * 0.6 + 1.0
+        draw_cols = c_end - c_start
+        draw_rows = r_end - r_start
+        fig_w = draw_cols * cell_w * 0.6 + 2.5
+        fig_h = draw_rows * cell_h * 0.6 + 1.0
         fig, ax = plt.subplots(figsize=(fig_w, fig_h))
     else:
         fig = ax.get_figure()
@@ -1114,8 +1148,8 @@ def plot_state_heatmap(
     bar_height_frac = 0.30
     bar_y_offset = 0.10
 
-    for gr in range(n_rows):
-        for gc in range(n_cols):
+    for gr in range(r_start, r_end):
+        for gc in range(c_start, c_end):
             x0 = gc * cell_w
             y0 = (n_rows - 1 - gr) * cell_h
             val = float(values[gr, gc])
@@ -1152,48 +1186,303 @@ def plot_state_heatmap(
                 cursor += seg_w
 
             # Value label
-            label_color = "white" if norm(val) > 0.6 else "black"
-            ax.text(
-                x0 + cell_w / 2, y0 + cell_h * 0.72,
-                f"{val:.2f}",
-                ha="center", va="center",
-                fontsize=7, fontweight="bold", color=label_color,
-            )
+            if show_value_labels:
+                label_color = "white" if norm(val) > 0.6 else "black"
+                ax.text(
+                    x0 + cell_w / 2, y0 + cell_h * 0.72,
+                    f"{val:.2f}",
+                    ha="center", va="center",
+                    fontsize=value_label_fontsize, fontweight="bold", color=label_color,
+                )
 
-    ax.set_xlim(0, n_cols * cell_w)
-    ax.set_ylim(0, n_rows * cell_h)
+    ax.set_xlim(c_start * cell_w, c_end * cell_w)
+    ax.set_ylim((n_rows - r_end) * cell_h, (n_rows - r_start) * cell_h)
     ax.set_aspect("equal")
     ax.axis("off")
-    ax.set_title(title, fontsize=12, fontweight="bold", pad=12)
+    if title:
+        ax.set_title(title, fontsize=title_fontsize, fontweight="bold", pad=12)
 
     # Colour bar
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-    sm.set_array([])
-    cbar = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02)
-    cbar.set_label(unit, fontsize=9)
+    if show_colorbar:
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+        cbar = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02)
+        cbar.set_label(unit, fontsize=9)
 
     # Land-cover legend
-    legend_handles = [
-        Line2D(
-            [0], [0], marker="s", color="w",
-            markerfacecolor=color, markersize=7,
-            label=LAND_COVER_LABELS.get(cls, f"Class {cls}"),
+    if show_legend:
+        legend_handles = [
+            Line2D(
+                [0], [0], marker="s", color="w",
+                markerfacecolor=color, markersize=7,
+                label=LAND_COVER_LABELS.get(cls, f"Class {cls}"),
+            )
+            for cls, color in sorted(LAND_COVER_COLORS.items())
+            if cls in LAND_COVER_LABELS
+        ]
+        ax.legend(
+            handles=legend_handles, title="Land Cover",
+            loc="upper left", bbox_to_anchor=(1.08, 1.0),
+            fontsize=6, title_fontsize=7, frameon=True,
         )
-        for cls, color in sorted(LAND_COVER_COLORS.items())
-        if cls in LAND_COVER_LABELS
-    ]
-    ax.legend(
-        handles=legend_handles, title="Land Cover",
-        loc="upper left", bbox_to_anchor=(1.08, 1.0),
-        fontsize=6, title_fontsize=7, frameon=True,
-    )
 
-    plt.tight_layout()
+    if own_fig:
+        plt.tight_layout()
     if save_path is not None:
         fig.savefig(save_path, dpi=200, bbox_inches="tight")
         logger.info(f"State heatmap saved to {save_path}")
 
     return fig, ax
+
+
+def plot_zoom_comparison(
+    initial_obs,
+    finals_by_exp,
+    regions,
+    value_vec,
+    diffs_by_exp=None,
+    save_path=None,
+    cmap_colors=None,
+):
+    """Build an overview-plus-zoom-grid figure for cross-experiment comparison.
+
+    Layout (matches Option C from the paper plan):
+
+        ┌──────────────────────────────────────────────────┐
+        │         Overview: Original whole map             │   row 0
+        │   (full 50×50 with coloured locator boxes)       │
+        ├───────────┬───────────┬───────────┬──────────────┤
+        │ Region A  │ Region B  │ Region C  │   Original   │   row 1
+        ├───────────┼───────────┼───────────┤              │
+        │ Region A  │ Region B  │ Region C  │    Exp I     │   row 2
+        ├───────────┼───────────┼───────────┤              │
+        │ Region A  │ Region B  │ Region C  │    Exp II    │   row 3
+        ├───────────┼───────────┼───────────┤              │
+        │ Region A  │ Region B  │ Region C  │   Exp III    │   row 4
+        └───────────┴───────────┴───────────┴──────────────┘
+
+    Parameters
+    ----------
+    initial_obs : ndarray (R, C, N_CLASSES)
+        Initial land-cover fractions / pixel counts (the "Original" map).
+    finals_by_exp : dict[str, ndarray]
+        Ordered mapping from experiment label → reconstructed final state.
+    regions : list[tuple]
+        Each tuple is ``(label, r0, c0, h, w, color)`` in absolute grid
+        coords. Rectangles with the given edge colour are drawn on the
+        overview; the zoom grid columns appear in the same order.
+    value_vec : ndarray (N_CLASSES,)
+        Per-class value vector used for the background ESV colormap.
+    diffs_by_exp : dict[str, set[tuple(int,int)]] | None
+        Optional mapping from experiment label → set of modified (row, col)
+        pairs. When provided, a black border is drawn on modified cells
+        inside each zoom panel of that experiment's row. Keep the black
+        border signal consistent with the existing before/after figures.
+    save_path : str | Path | None
+        If given, save the figure to this path.
+    cmap_colors : list[str] | None
+        Override for the ESV colormap stops.
+
+    Returns
+    -------
+    fig
+    """
+    import matplotlib.colors as mcolors
+    import matplotlib.gridspec as gridspec
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Rectangle
+
+    if cmap_colors is None:
+        cmap_colors = ["#e8f5e9", "#ffffcc", "#ffccbc", "#ef5350", "#b71c1c"]
+
+    initial_obs = np.asarray(initial_obs, dtype=np.float32)
+    n_rows, n_cols, _ = initial_obs.shape
+
+    # Shared colour range across all panels, computed from every state we
+    # are about to draw. This keeps the ESV colormap comparable between
+    # the overview and the zoom cells.
+    def _cell_values(state):
+        s = np.asarray(state, dtype=np.float32)
+        rs = s.sum(axis=-1, keepdims=True)
+        rs = np.where(rs == 0, 1.0, rs)
+        return (s / rs) @ np.asarray(value_vec, dtype=np.float32)
+
+    all_values = [_cell_values(initial_obs)]
+    for st in finals_by_exp.values():
+        all_values.append(_cell_values(st))
+    stacked = np.concatenate([v.ravel() for v in all_values])
+    shared_range = (float(stacked.min()), float(stacked.max()))
+
+    # Figure dimensions — sized for IEEE two-column (\begin{figure*}).
+    n_regions = len(regions)
+    exp_labels = list(finals_by_exp.keys())
+    n_state_rows = 1 + len(exp_labels)   # Original + each experiment
+
+    # Each zoom cell is roughly "region side" × cell_size inches; make them
+    # roughly square so the reader can trace cells.
+    #
+    # The aspect ratio of the whole figure matters a lot here: an IEEE
+    # two-column text area is ~7.1 × 9.4 in, so we target an aspect
+    # ratio ≲ 1.32 so \includegraphics can scale the figure to fit a
+    # full page without clipping the bottom (Exp III) row.
+    zoom_cell_in = 0.50  # inches per grid-cell inside a zoom panel
+    max_side = max(h for _, _, _, h, _, _ in regions)
+    max_side = max(max_side, max(w for _, _, _, _, w, _ in regions))
+    panel_in = max_side * zoom_cell_in + 0.35
+
+    # Target IEEE two-column figure width (~7.1in usable).
+    fig_w = max(n_regions * panel_in + 2.0, 7.1)
+    # Overview height — kept small so the state-row grid doesn't overflow.
+    overview_in = 2.8
+    fig_h = overview_in + n_state_rows * panel_in + 0.6
+    fig = plt.figure(figsize=(fig_w, fig_h))
+
+    # Two stacked gridspec sections: overview (top) and zoom grid (bottom).
+    outer = gridspec.GridSpec(
+        2, 1, figure=fig,
+        height_ratios=[overview_in, n_state_rows * panel_in],
+        hspace=0.22,
+    )
+
+    # ── Top: overview with a three-column sub-grid ───────────────────
+    # [left pad] [map] [sidebar: colorbar + legend]
+    # Keeping the colorbar and legend in their own axes avoids the
+    # overlap seen when plot_state_heatmap tries to place both in the
+    # right margin of a single axes.
+    overview_gs = gridspec.GridSpecFromSubplotSpec(
+        1, 3,
+        subplot_spec=outer[0],
+        width_ratios=[0.9, 3.0, 1.0],
+        wspace=0.05,
+    )
+    ax_over = fig.add_subplot(overview_gs[1])
+    plot_state_heatmap(
+        initial_obs, value_vec,
+        title="Original land-use allocation (zoom regions outlined)",
+        ax=ax_over,
+        value_range=shared_range,
+        show_legend=False,
+        show_colorbar=False,
+        show_value_labels=False,
+        title_fontsize=11,
+    )
+    for (label, r0, c0, h, w, color) in regions:
+        # Grid coords → axes coords: y axis is flipped (n_rows - 1 - r).
+        x = c0
+        y = n_rows - r0 - h
+        ax_over.add_patch(
+            Rectangle(
+                (x, y), w, h,
+                linewidth=2.4, edgecolor=color, facecolor="none",
+                zorder=5,
+            )
+        )
+        ax_over.text(
+            x + w / 2, y + h + 0.4, label,
+            ha="center", va="bottom",
+            fontsize=11, fontweight="bold", color=color,
+            zorder=6,
+        )
+
+    # Sidebar: colorbar on top, land-cover legend below — stacked so
+    # they never fight for the same space.
+    sidebar_gs = gridspec.GridSpecFromSubplotSpec(
+        2, 1,
+        subplot_spec=overview_gs[2],
+        height_ratios=[1.0, 2.2],
+        hspace=0.35,
+    )
+    # Colorbar
+    cmap = mcolors.LinearSegmentedColormap.from_list("val", cmap_colors)
+    norm = mcolors.Normalize(vmin=shared_range[0], vmax=shared_range[1])
+    cax = fig.add_subplot(sidebar_gs[0])
+    cax.set_box_aspect(6.0)  # narrow vertical colorbar
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, cax=cax, orientation="vertical")
+    cbar.set_label("ESV", fontsize=9)
+    cbar.ax.tick_params(labelsize=8)
+    # Legend
+    legend_ax = fig.add_subplot(sidebar_gs[1])
+    legend_ax.axis("off")
+    legend_handles = [
+        Line2D([0], [0], marker="s", color="w",
+               markerfacecolor=color, markersize=8,
+               label=LAND_COVER_LABELS.get(cls, f"Class {cls}"))
+        for cls, color in sorted(LAND_COVER_COLORS.items())
+        if cls in LAND_COVER_LABELS
+    ]
+    legend_ax.legend(
+        handles=legend_handles, title="Land Cover",
+        loc="center left", fontsize=7, title_fontsize=8, frameon=True,
+    )
+
+    # ── Bottom: zoom grid (n_state_rows × n_regions) ─────────────────
+    inner = gridspec.GridSpecFromSubplotSpec(
+        n_state_rows, n_regions,
+        subplot_spec=outer[1],
+        wspace=0.12, hspace=0.22,
+    )
+
+    state_rows = [("Original", initial_obs, None)]
+    for lbl in exp_labels:
+        d = None
+        if diffs_by_exp is not None:
+            d = diffs_by_exp.get(lbl)
+        state_rows.append((lbl, finals_by_exp[lbl], d))
+
+    for row_idx, (row_label, state, diff_set) in enumerate(state_rows):
+        for col_idx, (region_label, r0, c0, h, w, color) in enumerate(regions):
+            ax = fig.add_subplot(inner[row_idx, col_idx])
+            # Column header only for the top row
+            title = f"Region {region_label}" if row_idx == 0 else ""
+            plot_state_heatmap(
+                state, value_vec,
+                title=title,
+                ax=ax,
+                bbox=(r0, c0, h, w),
+                value_range=shared_range,
+                show_legend=False,
+                show_colorbar=False,
+                show_value_labels=True,
+                title_fontsize=10,
+                value_label_fontsize=6,
+            )
+            # Coloured panel border matching the overview box
+            for spine in ax.spines.values():
+                spine.set_visible(False)
+            ax.add_patch(
+                Rectangle(
+                    (c0, n_rows - r0 - h), w, h,
+                    linewidth=2.0, edgecolor=color, facecolor="none",
+                    zorder=4,
+                )
+            )
+            # Row label on the leftmost column
+            if col_idx == 0:
+                ax.text(
+                    -0.12, 0.5, row_label,
+                    transform=ax.transAxes,
+                    rotation=90, ha="center", va="center",
+                    fontsize=11, fontweight="bold",
+                )
+            # Re-draw modified-cell borders for this experiment's row
+            if diff_set:
+                for (rr, cc) in diff_set:
+                    if r0 <= rr < r0 + h and c0 <= cc < c0 + w:
+                        ax.add_patch(
+                            Rectangle(
+                                (cc, n_rows - 1 - rr), 1, 1,
+                                linewidth=1.4, edgecolor="black",
+                                facecolor="none", zorder=3,
+                            )
+                        )
+
+    if save_path is not None:
+        fig.savefig(save_path, dpi=220, bbox_inches="tight")
+        logger.info(f"Zoom comparison saved to {save_path}")
+
+    return fig
 
 
 if __name__ == "__main__":

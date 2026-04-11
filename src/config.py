@@ -43,32 +43,32 @@ ET_VALUES = {
     11: 745.94,   # Rangeland
 }
 
-# Economic value per land-cover class (USD / ha / year)
-# Costanza 2014 ratios scaled to Malawi anchor (Zuze 2013: Lake Chiuta wetland $554/ha/yr)
-# ECO_VALUES = {
-#     1:  554,    # Water (Lakes/Rivers)  – anchor value, ratio 1.00
-#     2:  238,    # Trees (Tropical Forest) – ratio 0.43
-#     4:  1136,   # Flooded (Inland Wetlands) – ratio 2.05
-#     5:  246,    # Crops (Cropland) – ratio 0.44
-#     7:  295,    # Built Area (Urban) – ratio 0.53
-#     8:  0,      # Bare Ground (Desert) – ~0
-#     9:  0,      # Snow/Ice – no economic value
-#     10: 0,      # Clouds – no economic value (masked)
-#     11: 184,    # Rangeland (Grass/Rangelands) – ratio 0.33
-# }
-
-# # With regenerative agriculture considered
+# # Economic value per land-cover class (USD / ha / year)
+# # Costanza 2014 ratios scaled to Malawi anchor (Zuze 2013: Lake Chiuta wetland $554/ha/yr)
 ECO_VALUES = {
     1:  554,    # Water (Lakes/Rivers)  – anchor value, ratio 1.00
     2:  238,    # Trees (Tropical Forest) – ratio 0.43
     4:  1136,   # Flooded (Inland Wetlands) – ratio 2.05
-    5:  246 * 1.35,    # Crops (Cropland) – ratio 0.44
+    5:  246,    # Crops (Cropland) – ratio 0.44
     7:  295,    # Built Area (Urban) – ratio 0.53
     8:  0,      # Bare Ground (Desert) – ~0
     9:  0,      # Snow/Ice – no economic value
     10: 0,      # Clouds – no economic value (masked)
     11: 184,    # Rangeland (Grass/Rangelands) – ratio 0.33
 }
+
+# # With regenerative agriculture multiplier
+# ECO_VALUES = {
+#     1:  554,    # Water (Lakes/Rivers)  – anchor value, ratio 1.00
+#     2:  238,    # Trees (Tropical Forest) – ratio 0.43
+#     4:  1136,   # Flooded (Inland Wetlands) – ratio 2.05
+#     5:  246 * 1.35,    # Crops (Cropland) – ratio 0.44
+#     7:  295,    # Built Area (Urban) – ratio 0.53
+#     8:  0,      # Bare Ground (Desert) – ~0
+#     9:  0,      # Snow/Ice – no economic value
+#     10: 0,      # Clouds – no economic value (masked)
+#     11: 184,    # Rangeland (Grass/Rangelands) – ratio 0.33
+# }
 
 
 

@@ -34,14 +34,11 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from src.config import (
-    PROTECTED_CLASSES, ECO_VALUES, ET_VALUES,
+    ECO_VALUES, ET_VALUES,
     N_CLASSES, N_PIXELS_PER_CELL, SEED, data_dir, log_dir,
 )
 from src.post_eda import plot_state_heatmap
-from src.train import (
-    LandUseEnv, MODIFIABLE_CLASSES, N_MOD,
-    augment_data,
-)
+from src.train import LandUseEnv, MODIFIABLE_CLASSES
 from src.utils import minmax_normalize, get_logger
 
 
@@ -90,24 +87,66 @@ def parse_args():
     return p.parse_args()
 
 
-def _make_env(args, split):
-    """Create an evaluation environment with no augmentation."""
+def make_env(args, split):
+    """Create an evaluation environment with no augmentation.
+
+    ``args`` may be the full eval-CLI Namespace or any object exposing the
+    env-related attributes listed below.
+    """
     return LandUseEnv(
         split=split,
-        max_steps=args.max_steps,
-        spatial_scale=args.spatial_scale,
-        w_tree=args.w_tree,
-        w_crop=args.w_crop,
-        w_built=args.w_built,
-        w_buf=args.w_buf,
-        lambda_et=args.lambda_et,
-        reward_scale=args.reward_scale,
+        max_steps=getattr(args, "max_steps", 500),
+        spatial_scale=getattr(args, "spatial_scale", 1.0),
+        w_tree=getattr(args, "w_tree", 3.0),
+        w_crop=getattr(args, "w_crop", 1.0),
+        w_built=getattr(args, "w_built", 1.0),
+        w_buf=getattr(args, "w_buf", 2.0),
+        lambda_et=getattr(args, "lambda_et", 1.0),
+        reward_scale=getattr(args, "reward_scale", 1.0),
         n_augment=0,
-        et_dcs_tolerance=args.et_dcs_tolerance,
-        min_mod_frac=args.min_mod_frac,
-        pixels_per_transfer=args.pixels_per_transfer,
-        max_consecutive_noops=args.max_consecutive_noops,
+        et_dcs_tolerance=getattr(args, "et_dcs_tolerance", 1.0),
+        min_mod_frac=getattr(args, "min_mod_frac", 0.1),
+        pixels_per_transfer=getattr(args, "pixels_per_transfer", 5),
+        max_consecutive_noops=getattr(args, "max_consecutive_noops", 10),
     )
+
+
+def build_value_vecs(use_et=False, assign_globals=True):
+    """Construct normalised per-class eco/ET value vectors.
+
+    Mirrors the setup used at training time. When ``assign_globals`` is
+    True (the default) the matching slices are also written into
+    ``src.train.ECO_MOD`` / ``ET_MOD`` so a loaded env can compute rewards
+    consistently during inference.
+
+    Returns ``(eco_per_class, et_per_class)`` — combined ``value_vec`` is
+    just their sum.
+    """
+    et_values = ET_VALUES if use_et else {k: 0 for k in ET_VALUES}
+    norm_et = minmax_normalize(et_values)
+    norm_eco = minmax_normalize(ECO_VALUES)
+
+    eco_per_class = np.zeros(N_CLASSES, dtype=np.float32)
+    et_per_class = np.zeros(N_CLASSES, dtype=np.float32)
+    for cls, val in norm_eco.items():
+        if cls < N_CLASSES:
+            eco_per_class[cls] = val
+    for cls, val in norm_et.items():
+        if cls < N_CLASSES:
+            et_per_class[cls] = val
+
+    if assign_globals:
+        import src.train as train_module
+        train_module.ECO_MOD = eco_per_class[MODIFIABLE_CLASSES]
+        train_module.ET_MOD = et_per_class[MODIFIABLE_CLASSES]
+
+    return eco_per_class, et_per_class
+
+
+def compute_diff_cells(initial_obs, final_obs_recst, atol=1e-6):
+    """Return the set of ``(row, col)`` coordinates that changed."""
+    diff_mask = ~np.isclose(initial_obs, final_obs_recst, atol=atol)
+    return {(int(r), int(c)) for r, c, _ in np.argwhere(diff_mask)}
 
 
 def run_inference(model, env, data, split_key, deterministic=False):
@@ -198,53 +237,34 @@ def main():
     args = parse_args()
 
     # ── Set value vectors (must match training) ────────────────────
-    if args.use_et:
-        et_values = ET_VALUES
-    else:
-        et_values = {k: 0 for k in ET_VALUES}
-
-    norm_et = minmax_normalize(et_values)
-    norm_eco = minmax_normalize(ECO_VALUES)
-
-    eco_per_class = np.zeros(N_CLASSES, dtype=np.float32)
-    et_per_class = np.zeros(N_CLASSES, dtype=np.float32)
-    for cls, val in norm_eco.items():
-        if cls < N_CLASSES:
-            eco_per_class[cls] = val
-    for cls, val in norm_et.items():
-        if cls < N_CLASSES:
-            et_per_class[cls] = val
-
-    train_module.ECO_MOD = eco_per_class[MODIFIABLE_CLASSES]
-    train_module.ET_MOD = et_per_class[MODIFIABLE_CLASSES]
+    eco_per_class, et_per_class = build_value_vecs(use_et=args.use_et)
+    value_vec = eco_per_class + et_per_class
 
     train_module.logger = get_logger(
         "eval", stream=False, level="WARNING",
         log_file=str(Path(log_dir, "eval.log")),
     )
 
-    value_vec = eco_per_class + et_per_class
-
     # ── Load model & data ──────────────────────────────────────────
     data = np.load(Path(data_dir, "processed", "rl_dataset.npz"))
     final_obs = {}
 
     # Create a dummy env for loading (SB3 needs it)
-    dummy_env = _make_env(args, "test_indices")
+    dummy_env = make_env(args, "test_indices")
     model = MaskablePPO.load(args.model_path, env=dummy_env)
     print(f"Loaded model from {args.model_path}")
 
     # ── Run inference ──────────────────────────────────────────────
     if args.split in ("test", "both"):
         print("\n=== Test split ===")
-        env = _make_env(args, "test_indices")
+        env = make_env(args, "test_indices")
         test_obs = run_inference(model, env, data, "test_indices",
                                  deterministic=args.deterministic)
         final_obs.update(test_obs)
 
     if args.split in ("train", "both"):
         print("\n=== Train split ===")
-        env = _make_env(args, "train_indices")
+        env = make_env(args, "train_indices")
         train_obs = run_inference(model, env, data, "train_indices",
                                   deterministic=args.deterministic)
         final_obs.update(train_obs)
