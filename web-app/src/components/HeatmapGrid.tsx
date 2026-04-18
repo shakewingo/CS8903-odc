@@ -19,43 +19,9 @@ LAND_COVERS.forEach((lc) => { COLOR_MAP[lc.id] = lc.color; });
 export const DEFAULT_ESV_MAP: Record<number, number> = {};
 LAND_COVERS.forEach((lc) => { DEFAULT_ESV_MAP[lc.id] = lc.defaultEsv; });
 
-type CellData = { row: number; col: number; fractions: Record<number, number> };
+export type CellFractions = Record<string, number>;
 
-export function generateMockGrid(rows: number, cols: number): CellData[] {
-  const grid: CellData[] = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const isNearCenter = Math.abs(r - rows / 2) < rows / 4 && Math.abs(c - cols / 2) < cols / 4;
-      const isEdge = r < 2 || r > rows - 3 || c < 2 || c > cols - 3;
-      const fractions: Record<number, number> = {};
-      if (isNearCenter) {
-        fractions[1] = 0.3 + Math.random() * 0.3;
-        fractions[2] = 0.1 + Math.random() * 0.2;
-        fractions[4] = Math.random() * 0.15;
-        fractions[5] = Math.random() * 0.1;
-        fractions[11] = Math.random() * 0.1;
-      } else if (isEdge) {
-        fractions[5] = 0.2 + Math.random() * 0.3;
-        fractions[7] = 0.1 + Math.random() * 0.2;
-        fractions[11] = 0.2 + Math.random() * 0.2;
-        fractions[2] = Math.random() * 0.1;
-        fractions[8] = Math.random() * 0.1;
-      } else {
-        fractions[2] = 0.15 + Math.random() * 0.2;
-        fractions[5] = 0.1 + Math.random() * 0.2;
-        fractions[11] = 0.15 + Math.random() * 0.2;
-        fractions[1] = Math.random() * 0.15;
-        fractions[7] = Math.random() * 0.1;
-      }
-      const total = Object.values(fractions).reduce((a, b) => a + b, 0);
-      for (const k of Object.keys(fractions)) fractions[Number(k)] /= total;
-      grid.push({ row: r, col: c, fractions });
-    }
-  }
-  return grid;
-}
-
-function HeatmapCell({ fractions, esvValues }: { fractions: Record<number, number>; esvValues: Record<number, number> }) {
+function HeatmapCell({ fractions, esvValues }: { fractions: CellFractions; esvValues: Record<number, number> }) {
   const totalEsv = Object.entries(fractions).reduce(
     (sum, [id, frac]) => sum + frac * (esvValues[Number(id)] || 0), 0
   );
@@ -76,34 +42,45 @@ function HeatmapCell({ fractions, esvValues }: { fractions: Record<number, numbe
   );
 }
 
-const GRID_SIZE = 10;
-
 interface HeatmapGridProps {
   esvValues: Record<number, number>;
   label: string;
+  grid?: CellFractions[][] | null;
+  gridSize?: number;
+  highlightCells?: Set<string>;
 }
 
-export default function HeatmapGrid({ esvValues, label }: HeatmapGridProps) {
-  const [mockGrid, setMockGrid] = useState<CellData[] | null>(null);
-
-  useEffect(() => {
-    setMockGrid(generateMockGrid(GRID_SIZE, GRID_SIZE));
-  }, []);
+export default function HeatmapGrid({ esvValues, label, grid, gridSize = 50, highlightCells }: HeatmapGridProps) {
+  if (!grid) {
+    return (
+      <div>
+        <p className="text-xs font-semibold text-text-on-dark-muted uppercase tracking-wider mb-3">{label}</p>
+        <div className="flex items-center justify-center aspect-square rounded-lg border border-border-dark">
+          <Loader2 size={24} className="animate-spin text-text-on-dark-muted" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
       <p className="text-xs font-semibold text-text-on-dark-muted uppercase tracking-wider mb-3">{label}</p>
-      {mockGrid ? (
-        <div className="grid gap-[3px]" style={{ gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)` }}>
-          {mockGrid.map((cell, i) => (
-            <HeatmapCell key={i} fractions={cell.fractions} esvValues={esvValues} />
-          ))}
-        </div>
-      ) : (
-        <div className="flex items-center justify-center aspect-square rounded-lg border border-border-dark">
-          <Loader2 size={24} className="animate-spin text-text-on-dark-muted" />
-        </div>
-      )}
+      <div className="grid gap-[1px]" style={{ gridTemplateColumns: `repeat(${gridSize}, 1fr)` }}>
+        {grid.flatMap((row, r) =>
+          row.map((fractions, c) => {
+            const key = `${r},${c}`;
+            const isHighlighted = highlightCells?.has(key);
+            return (
+              <div key={key} className="relative">
+                <HeatmapCell fractions={fractions} esvValues={esvValues} />
+                {isHighlighted && (
+                  <div className="absolute inset-0 border border-accent-green-light rounded-[2px] pointer-events-none" />
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }

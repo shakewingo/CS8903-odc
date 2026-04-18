@@ -127,10 +127,11 @@ web-app/src/
 - [x] Demo layout with mock data — all 6 sections
 - [x] Feedback round 1 applied (2026-04-18)
 - [x] UI redesign brainstorm — "Scroll-to-Dashboard" approach approved (2026-04-18)
-- [ ] Implement dashboard redesign (in progress)
-- [ ] Replace map placeholder with Leaflet + click-to-select study area
-- [ ] Load actual grid data from API / JSON
-- [ ] Connect model inference backend
+- [x] Implement dashboard redesign (2026-04-18)
+- [x] Replace map placeholder with Leaflet + click-to-select study area (2026-04-18)
+- [x] Load actual grid data from exported JSON (2026-04-18)
+- [x] Connect pre-trained model inference results for all 3 experiments (2026-04-18)
+- [ ] Connect live model inference backend (Phase 2)
 - [ ] Expand results table to top 50 (currently top 15 in demo)
 
 
@@ -284,5 +285,25 @@ I like it overall! Just few things:
 
 ### Changes Applied
 1. **Map expand/collapse**: Default expanded (60vh), collapse button (bottom-right) shrinks to 30vh. Smooth transition.
-2. **Buffer zone restriction**: 25km radius circle shown as dashed green boundary on map. Clicks outside the boundary are ignored. Helper text updated to "Click within the green boundary."
+2. **Buffer zone restriction**: 25km radius circle shown as dashed green boundary on map. Clicks outside the boundary are ignored. Helper text updated to "Click within the green boundary." -- Feedback: Actually the buffer zone is not 25km radius circle, but the 25km buffering area of the lake boundary, which has simliar processing in ./notebook/landcover.ipynb
 3. **Hint as tooltip**: Removed inline blue info boxes from ConfigPanel and EsvPanel. Added `?` icon (HelpCircle) to the accordion header for "Configuration Details" and "ESV Values & Sources" with hover tooltip showing the note.
+
+### Real Data Integration (2026-04-18)
+- Created `scripts/export_web_data.py` to convert `rl_dataset.npz` → JSON and run model inference for all 3 experiments
+- Exported files to `web-app/public/data/`:
+  - `grid_data.json` (170 KB) — real 50x50 grid with land cover fractions and ESV per cell
+  - `results_exp1.json` (69 KB) — Exp I inference: before/after grids, changed cells, ESV rankings
+  - `results_exp2.json` (69 KB) — Exp II inference
+  - `results_exp3.json` (69 KB) — Exp III inference
+- Updated `HeatmapGrid`, `ResultsGrid`, `DashboardSection` to fetch and render real data
+- Side-by-side heatmaps now show real before (current allocation) and after (optimized) grids
+- Changed cells are highlighted with green borders on the "after" grid
+- Summary stats (cells changed, ESV gain, etc.) come from actual model inference
+- Rankings table shows real ESV change data per cell
+
+### Vercel Deployment
+The app is deployable to Vercel as a static Next.js site:
+1. `cd web-app && npm run build` produces a static export
+2. Push to GitHub and connect the repo to Vercel
+3. Set the root directory to `web-app` in Vercel project settings
+4. All data files in `public/data/` are served as static assets -- Feedback: when hovering the question mark, I cannot see the full text (see ss in ./report/research/hover_text.png). Plus, remove the view and W&B link, but using the same "Read-only" thing

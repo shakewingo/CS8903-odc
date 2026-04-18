@@ -1,42 +1,89 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { Minimize2, Maximize2 } from 'lucide-react';
 import ExperimentToolbar from './ExperimentToolbar';
 import HeatmapGrid, { DEFAULT_ESV_MAP, LAND_COVERS } from './HeatmapGrid';
+import type { CellFractions } from './HeatmapGrid';
 import ResultsGrid from './ResultsGrid';
 import AccordionPanel from './AccordionPanel';
 import EsvPanel from './EsvPanel';
 import ConfigPanel from './ConfigPanel';
 import RankingsTable from './RankingsTable';
 
-// Leaflet must be loaded client-side only
 const MapDashboard = dynamic(() => import('./MapDashboard'), { ssr: false });
 
 const REGEN_CROP_VALUE = Math.round(246 * 1.35);
+
+interface GridData {
+  rows: number;
+  cols: number;
+  grid: Array<Array<{ f: CellFractions; e: number; lat: number; lng: number }>>;
+}
+
+interface ResultsData {
+  before: CellFractions[][];
+  after: CellFractions[][];
+  changedCells: number[][];
+  esvChanges: Array<{ row: number; col: number; fromType: number; toType: number; esvDelta: number }>;
+  summary: { cellsChanged: number; totalEsvGain: number; maxCellGain: number; pctAreaModified: number };
+}
 
 export default function DashboardSection() {
   const [selectedExp, setSelectedExp] = useState('exp2');
   const [studyArea, setStudyArea] = useState<{ lat: number; lng: number } | null>(null);
   const [mapExpanded, setMapExpanded] = useState(true);
 
+  const [gridData, setGridData] = useState<GridData | null>(null);
+  const [results, setResults] = useState<Record<string, ResultsData>>({});
+
+  // Load grid data
+  useEffect(() => {
+    fetch('/data/grid_data.json')
+      .then((r) => r.json())
+      .then((data) => setGridData(data))
+      .catch(() => console.warn('Failed to load grid data'));
+  }, []);
+
+  // Load results for all experiments
+  useEffect(() => {
+    const exps = ['exp1', 'exp2', 'exp3'];
+    Promise.all(
+      exps.map((exp) =>
+        fetch(`/data/results_${exp}.json`)
+          .then((r) => r.json())
+          .then((data) => ({ exp, data }))
+          .catch(() => null)
+      )
+    ).then((all) => {
+      const map: Record<string, ResultsData> = {};
+      for (const item of all) {
+        if (item) map[item.exp] = item.data;
+      }
+      setResults(map);
+    });
+  }, []);
+
   const isRegenCrop = selectedExp === 'exp3';
   const esvValues: Record<number, number> = { ...DEFAULT_ESV_MAP };
   if (isRegenCrop) esvValues[5] = REGEN_CROP_VALUE;
 
-  // Mock changes data for rankings (in production this comes from model inference)
-  const mockChanges = [
-    { row: 3, col: 7, fromType: 11, toType: 2, esvDelta: 54.2 },
-    { row: 5, col: 2, fromType: 5, toType: 2, esvDelta: 41.8 },
-    { row: 8, col: 4, fromType: 11, toType: 2, esvDelta: 38.1 },
-    { row: 1, col: 9, fromType: 5, toType: 2, esvDelta: 35.6 },
-    { row: 6, col: 6, fromType: 11, toType: 2, esvDelta: 29.4 },
-  ];
+  // Extract the "before" grid (from grid_data.json)
+  const beforeGrid: CellFractions[][] | null = gridData
+    ? gridData.grid.map((row) => row.map((cell) => cell.f))
+    : null;
+
+  // Get results for current experiment
+  const currentResults = results[selectedExp] || null;
+  const afterGrid = currentResults?.after || null;
+  const changedCellsSet = currentResults
+    ? new Set(currentResults.changedCells.map(([r, c]) => `${r},${c}`))
+    : undefined;
 
   return (
     <section id="dashboard" className="bg-bg-dark min-h-screen">
-      {/* Sticky Map — expandable/collapsible */}
+      {/* Sticky Map */}
       <div className={`sticky top-0 z-20 border-b border-border-dark transition-[height] duration-300 ${mapExpanded ? 'h-[60vh]' : 'h-[30vh]'}`}>
         <MapDashboard studyArea={studyArea} onSelectArea={setStudyArea} />
         <button
@@ -53,10 +100,10 @@ export default function DashboardSection() {
 
       {/* Analysis Content */}
       <div className="max-w-6xl mx-auto px-4 py-8">
-        {/* Side-by-side: Heatmap (before) | Results (after) */}
+        {/* Side-by-side: Before | After */}
         <div className="grid lg:grid-cols-2 gap-8 mb-8">
           <div>
-            <HeatmapGrid esvValues={esvValues} label="Current ESV Distribution" />
+            <HeatmapGrid esvValues={esvValues} label="Current ESV Distribution" grid={beforeGrid} />
             {/* Shared legends */}
             <div className="flex items-center gap-3 mt-4 text-xs text-text-on-dark-muted">
               <span>Low ESV</span>
@@ -75,25 +122,36 @@ export default function DashboardSection() {
               ))}
             </div>
           </div>
-          <ResultsGrid />
+          <div>
+            <HeatmapGrid
+              esvValues={esvValues}
+              label="Optimized Allocation"
+              grid={afterGrid}
+              highlightCells={changedCellsSet}
+            />
+            {/* Summary Stats */}
+            <div className="mt-4">
+              <ResultsGrid summary={currentResults?.summary || null} />
+            </div>
+          </div>
         </div>
 
         {/* Collapsible Accordion Panels */}
         <div className="space-y-3">
           <AccordionPanel
             title="Configuration Details"
-            hint="Note: Above are currently loaded from static model configurations. Manual editing with custom retraining will be supported in a future update."
+            hint="Note: below is currently loaded from static model configurations. Manual editing with custom retraining will be supported in a future update."
           >
             <ConfigPanel selectedExp={selectedExp} />
           </AccordionPanel>
           <AccordionPanel
             title="ESV Values & Sources"
-            hint="Note: Above are currently loaded from static model configurations. Manual editing with custom retraining will be supported in a future update."
+            hint="Note: below is currently loaded from static model configurations. Manual editing with custom retraining will be supported in a future update."
           >
             <EsvPanel esvValues={esvValues} isRegenCrop={isRegenCrop} />
           </AccordionPanel>
           <AccordionPanel title="Change Rankings">
-            <RankingsTable changes={mockChanges} />
+            <RankingsTable changes={currentResults?.esvChanges || []} />
           </AccordionPanel>
         </div>
       </div>
