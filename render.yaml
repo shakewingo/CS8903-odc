@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: cs8903-odc-backend
+    runtime: docker
+    dockerfilePath: ./web-app/backend/Dockerfile
+    dockerContext: .
+    plan: starter
+    region: ohio
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8000"

@@ -1,4 +1,11 @@
 *.tif
-research/*
 *.ipynb_checkpoints
-src/ppo.py
+.vscode/
+*__pycache__/
+*.pyc
+runs/
+wandb/
+models/
+log/
+.env
+node_modules

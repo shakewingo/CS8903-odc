@@ -1,0 +1,434 @@
+{
+  "2017": {
+    "year": 2017,
+    "total_pixels": 594349727,
+    "classes": {
+      "1": {
+        "label": "Water",
+        "pixels": 296062405,
+        "percentage": 49.81,
+        "color": "#419bdf"
+      },
+      "2": {
+        "label": "Trees",
+        "pixels": 94756092,
+        "percentage": 15.94,
+        "color": "#397d49"
+      },
+      "4": {
+        "label": "Flooded",
+        "pixels": 279097,
+        "percentage": 0.05,
+        "color": "#7a87c6"
+      },
+      "5": {
+        "label": "Crops",
+        "pixels": 23663623,
+        "percentage": 3.98,
+        "color": "#e49635"
+      },
+      "7": {
+        "label": "Built Area",
+        "pixels": 8954681,
+        "percentage": 1.51,
+        "color": "#c4281b"
+      },
+      "8": {
+        "label": "Bare Ground",
+        "pixels": 163789,
+        "percentage": 0.03,
+        "color": "#a59b8f"
+      },
+      "10": {
+        "label": "Clouds",
+        "pixels": 5742,
+        "percentage": 0.0,
+        "color": "#616161"
+      },
+      "11": {
+        "label": "Rangeland",
+        "pixels": 170464298,
+        "percentage": 28.68,
+        "color": "#e3e2c3"
+      }
+    }
+  },
+  "2018": {
+    "year": 2018,
+    "total_pixels": 594349727,
+    "classes": {
+      "1": {
+        "label": "Water",
+        "pixels": 296140745,
+        "percentage": 49.83,
+        "color": "#419bdf"
+      },
+      "2": {
+        "label": "Trees",
+        "pixels": 110617108,
+        "percentage": 18.61,
+        "color": "#397d49"
+      },
+      "4": {
+        "label": "Flooded",
+        "pixels": 544220,
+        "percentage": 0.09,
+        "color": "#7a87c6"
+      },
+      "5": {
+        "label": "Crops",
+        "pixels": 22283444,
+        "percentage": 3.75,
+        "color": "#e49635"
+      },
+      "7": {
+        "label": "Built Area",
+        "pixels": 10205910,
+        "percentage": 1.72,
+        "color": "#c4281b"
+      },
+      "8": {
+        "label": "Bare Ground",
+        "pixels": 96417,
+        "percentage": 0.02,
+        "color": "#a59b8f"
+      },
+      "10": {
+        "label": "Clouds",
+        "pixels": 84383,
+        "percentage": 0.01,
+        "color": "#616161"
+      },
+      "11": {
+        "label": "Rangeland",
+        "pixels": 154377500,
+        "percentage": 25.97,
+        "color": "#e3e2c3"
+      }
+    }
+  },
+  "2019": {
+    "year": 2019,
+    "total_pixels": 594349727,
+    "classes": {
+      "1": {
+        "label": "Water",
+        "pixels": 296188895,
+        "percentage": 49.83,
+        "color": "#419bdf"
+      },
+      "2": {
+        "label": "Trees",
+        "pixels": 110611997,
+        "percentage": 18.61,
+        "color": "#397d49"
+      },
+      "4": {
+        "label": "Flooded",
+        "pixels": 458157,
+        "percentage": 0.08,
+        "color": "#7a87c6"
+      },
+      "5": {
+        "label": "Crops",
+        "pixels": 23421564,
+        "percentage": 3.94,
+        "color": "#e49635"
+      },
+      "7": {
+        "label": "Built Area",
+        "pixels": 10550809,
+        "percentage": 1.78,
+        "color": "#c4281b"
+      },
+      "8": {
+        "label": "Bare Ground",
+        "pixels": 83680,
+        "percentage": 0.01,
+        "color": "#a59b8f"
+      },
+      "10": {
+        "label": "Clouds",
+        "pixels": 25875,
+        "percentage": 0.0,
+        "color": "#616161"
+      },
+      "11": {
+        "label": "Rangeland",
+        "pixels": 153008750,
+        "percentage": 25.74,
+        "color": "#e3e2c3"
+      }
+    }
+  },
+  "2020": {
+    "year": 2020,
+    "total_pixels": 594349727,
+    "classes": {
+      "1": {
+        "label": "Water",
+        "pixels": 296398142,
+        "percentage": 49.87,
+        "color": "#419bdf"
+      },
+      "2": {
+        "label": "Trees",
+        "pixels": 100409978,
+        "percentage": 16.89,
+        "color": "#397d49"
+      },
+      "4": {
+        "label": "Flooded",
+        "pixels": 816341,
+        "percentage": 0.14,
+        "color": "#7a87c6"
+      },
+      "5": {
+        "label": "Crops",
+        "pixels": 25856763,
+        "percentage": 4.35,
+        "color": "#e49635"
+      },
+      "7": {
+        "label": "Built Area",
+        "pixels": 10615203,
+        "percentage": 1.79,
+        "color": "#c4281b"
+      },
+      "8": {
+        "label": "Bare Ground",
+        "pixels": 57904,
+        "percentage": 0.01,
+        "color": "#a59b8f"
+      },
+      "10": {
+        "label": "Clouds",
+        "pixels": 6062,
+        "percentage": 0.0,
+        "color": "#616161"
+      },
+      "11": {
+        "label": "Rangeland",
+        "pixels": 160189334,
+        "percentage": 26.95,
+        "color": "#e3e2c3"
+      }
+    }
+  },
+  "2021": {
+    "year": 2021,
+    "total_pixels": 594349727,
+    "classes": {
+      "1": {
+        "label": "Water",
+        "pixels": 296437041,
+        "percentage": 49.88,
+        "color": "#419bdf"
+      },
+      "2": {
+        "label": "Trees",
+        "pixels": 86120127,
+        "percentage": 14.49,
+        "color": "#397d49"
+      },
+      "4": {
+        "label": "Flooded",
+        "pixels": 916144,
+        "percentage": 0.15,
+        "color": "#7a87c6"
+      },
+      "5": {
+        "label": "Crops",
+        "pixels": 26686570,
+        "percentage": 4.49,
+        "color": "#e49635"
+      },
+      "7": {
+        "label": "Built Area",
+        "pixels": 11680205,
+        "percentage": 1.97,
+        "color": "#c4281b"
+      },
+      "8": {
+        "label": "Bare Ground",
+        "pixels": 46410,
+        "percentage": 0.01,
+        "color": "#a59b8f"
+      },
+      "10": {
+        "label": "Clouds",
+        "pixels": 16203,
+        "percentage": 0.0,
+        "color": "#616161"
+      },
+      "11": {
+        "label": "Rangeland",
+        "pixels": 172447027,
+        "percentage": 29.01,
+        "color": "#e3e2c3"
+      }
+    }
+  },
+  "2022": {
+    "year": 2022,
+    "total_pixels": 594349727,
+    "classes": {
+      "1": {
+        "label": "Water",
+        "pixels": 296576042,
+        "percentage": 49.9,
+        "color": "#419bdf"
+      },
+      "2": {
+        "label": "Trees",
+        "pixels": 95916954,
+        "percentage": 16.14,
+        "color": "#397d49"
+      },
+      "4": {
+        "label": "Flooded",
+        "pixels": 1297987,
+        "percentage": 0.22,
+        "color": "#7a87c6"
+      },
+      "5": {
+        "label": "Crops",
+        "pixels": 30356672,
+        "percentage": 5.11,
+        "color": "#e49635"
+      },
+      "7": {
+        "label": "Built Area",
+        "pixels": 12271820,
+        "percentage": 2.06,
+        "color": "#c4281b"
+      },
+      "8": {
+        "label": "Bare Ground",
+        "pixels": 38917,
+        "percentage": 0.01,
+        "color": "#a59b8f"
+      },
+      "10": {
+        "label": "Clouds",
+        "pixels": 22781,
+        "percentage": 0.0,
+        "color": "#616161"
+      },
+      "11": {
+        "label": "Rangeland",
+        "pixels": 157868554,
+        "percentage": 26.56,
+        "color": "#e3e2c3"
+      }
+    }
+  },
+  "2023": {
+    "year": 2023,
+    "total_pixels": 594349727,
+    "classes": {
+      "1": {
+        "label": "Water",
+        "pixels": 296870362,
+        "percentage": 49.95,
+        "color": "#419bdf"
+      },
+      "2": {
+        "label": "Trees",
+        "pixels": 94974139,
+        "percentage": 15.98,
+        "color": "#397d49"
+      },
+      "4": {
+        "label": "Flooded",
+        "pixels": 2233678,
+        "percentage": 0.38,
+        "color": "#7a87c6"
+      },
+      "5": {
+        "label": "Crops",
+        "pixels": 27576826,
+        "percentage": 4.64,
+        "color": "#e49635"
+      },
+      "7": {
+        "label": "Built Area",
+        "pixels": 12267058,
+        "percentage": 2.06,
+        "color": "#c4281b"
+      },
+      "8": {
+        "label": "Bare Ground",
+        "pixels": 28997,
+        "percentage": 0.0,
+        "color": "#a59b8f"
+      },
+      "10": {
+        "label": "Clouds",
+        "pixels": 24131,
+        "percentage": 0.0,
+        "color": "#616161"
+      },
+      "11": {
+        "label": "Rangeland",
+        "pixels": 160374536,
+        "percentage": 26.98,
+        "color": "#e3e2c3"
+      }
+    }
+  },
+  "2024": {
+    "year": 2024,
+    "total_pixels": 594349727,
+    "classes": {
+      "1": {
+        "label": "Water",
+        "pixels": 297201661,
+        "percentage": 50.0,
+        "color": "#419bdf"
+      },
+      "2": {
+        "label": "Trees",
+        "pixels": 103221610,
+        "percentage": 17.37,
+        "color": "#397d49"
+      },
+      "4": {
+        "label": "Flooded",
+        "pixels": 2786235,
+        "percentage": 0.47,
+        "color": "#7a87c6"
+      },
+      "5": {
+        "label": "Crops",
+        "pixels": 31337596,
+        "percentage": 5.27,
+        "color": "#e49635"
+      },
+      "7": {
+        "label": "Built Area",
+        "pixels": 12553491,
+        "percentage": 2.11,
+        "color": "#c4281b"
+      },
+      "8": {
+        "label": "Bare Ground",
+        "pixels": 35388,
+        "percentage": 0.01,
+        "color": "#a59b8f"
+      },
+      "10": {
+        "label": "Clouds",
+        "pixels": 4004,
+        "percentage": 0.0,
+        "color": "#616161"
+      },
+      "11": {
+        "label": "Rangeland",
+        "pixels": 147209742,
+        "percentage": 24.77,
+        "color": "#e3e2c3"
+      }
+    }
+  }
+}

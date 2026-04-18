@@ -1,0 +1,38 @@
+{
+  "1": {
+    "label": "Water",
+    "color": "#419bdf"
+  },
+  "2": {
+    "label": "Trees",
+    "color": "#397d49"
+  },
+  "4": {
+    "label": "Flooded",
+    "color": "#7a87c6"
+  },
+  "5": {
+    "label": "Crops",
+    "color": "#e49635"
+  },
+  "7": {
+    "label": "Built Area",
+    "color": "#c4281b"
+  },
+  "8": {
+    "label": "Bare Ground",
+    "color": "#a59b8f"
+  },
+  "9": {
+    "label": "Snow/Ice",
+    "color": "#a8ebff"
+  },
+  "10": {
+    "label": "Clouds",
+    "color": "#616161"
+  },
+  "11": {
+    "label": "Rangeland",
+    "color": "#e3e2c3"
+  }
+}
