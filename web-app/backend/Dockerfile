@@ -25,10 +25,11 @@ RUN apt-get purge -y gcc g++ && apt-get autoremove -y && rm -rf /var/lib/apt/lis
 COPY src/ ./src/
 COPY web-app/backend/ ./web-app/backend/
 
-# Data files
+# Data files (GeoTIFF, dataset, boundary polygon, ET values)
 COPY data/processed/malawi_masked_2024.tif ./data/processed/malawi_masked_2024.tif
 COPY data/processed/lake_malawi_expanded_25km.json ./data/processed/lake_malawi_expanded_25km.json
 COPY data/processed/rl_dataset.npz ./data/processed/rl_dataset.npz
+COPY data/processed/et_per_landcover_2024.json ./data/processed/et_per_landcover_2024.json
 
 # Pre-trained models
 COPY models/6f0ta58i/model.zip ./models/6f0ta58i/model.zip
