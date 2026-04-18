@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
+import { Maximize2, Minimize2 } from 'lucide-react';
 import ExperimentToolbar from './ExperimentToolbar';
 import HeatmapGrid, { DEFAULT_ESV_MAP, LAND_COVERS } from './HeatmapGrid';
 import ResultsGrid from './ResultsGrid';
@@ -18,6 +19,7 @@ const REGEN_CROP_VALUE = Math.round(246 * 1.35);
 export default function DashboardSection() {
   const [selectedExp, setSelectedExp] = useState('exp2');
   const [studyArea, setStudyArea] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapExpanded, setMapExpanded] = useState(true);
 
   const isRegenCrop = selectedExp === 'exp3';
   const esvValues: Record<number, number> = { ...DEFAULT_ESV_MAP };
@@ -34,9 +36,16 @@ export default function DashboardSection() {
 
   return (
     <section id="dashboard" className="bg-bg-dark min-h-screen">
-      {/* Sticky Map */}
-      <div className="sticky top-0 z-20 h-[40vh] border-b border-border-dark">
+      {/* Sticky Map — expandable/collapsible */}
+      <div className={`sticky top-0 z-20 border-b border-border-dark transition-[height] duration-300 ${mapExpanded ? 'h-[60vh]' : 'h-[30vh]'}`}>
         <MapDashboard studyArea={studyArea} onSelectArea={setStudyArea} />
+        <button
+          onClick={() => setMapExpanded(!mapExpanded)}
+          className="absolute bottom-3 right-3 z-[1000] bg-bg-dark/85 backdrop-blur-sm text-text-on-dark-muted hover:text-text-on-dark rounded-lg p-2 border border-border-dark transition-colors"
+          title={mapExpanded ? 'Collapse map' : 'Expand map'}
+        >
+          {mapExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+        </button>
       </div>
 
       {/* Experiment Toolbar */}
@@ -71,10 +80,16 @@ export default function DashboardSection() {
 
         {/* Collapsible Accordion Panels */}
         <div className="space-y-3">
-          <AccordionPanel title="Configuration Details">
+          <AccordionPanel
+            title="Configuration Details"
+            hint="Note: Above are currently loaded from static model configurations. Manual editing with custom retraining will be supported in a future update."
+          >
             <ConfigPanel selectedExp={selectedExp} />
           </AccordionPanel>
-          <AccordionPanel title="ESV Values & Sources">
+          <AccordionPanel
+            title="ESV Values & Sources"
+            hint="Note: Above are currently loaded from static model configurations. Manual editing with custom retraining will be supported in a future update."
+          >
             <EsvPanel esvValues={esvValues} isRegenCrop={isRegenCrop} />
           </AccordionPanel>
           <AccordionPanel title="Change Rankings">

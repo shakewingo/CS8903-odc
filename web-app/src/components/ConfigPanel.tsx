@@ -85,13 +85,6 @@ export default function ConfigPanel({ selectedExp }: ConfigPanelProps) {
           </div>
         ))}
       </div>
-
-      <div className="mt-4 p-3 rounded-lg bg-accent-blue/8 border border-accent-blue/15">
-        <p className="text-xs text-text-on-dark-muted leading-relaxed">
-          <strong className="text-text-on-dark">Phase 1:</strong> Static pre-trained models.
-          Retraining with manual config will be supported in a future update.
-        </p>
-      </div>
     </div>
   );
 }

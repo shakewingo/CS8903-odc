@@ -50,13 +50,6 @@ export default function EsvPanel({ esvValues, isRegenCrop }: EsvPanelProps) {
           </p>
         </div>
       )}
-
-      <div className="mt-3 p-3 rounded-lg bg-accent-blue/8 border border-accent-blue/15">
-        <p className="text-xs text-text-on-dark-muted leading-relaxed">
-          ESV values are currently loaded from static model configurations.
-          Manual editing with custom retraining will be supported in a future update.
-        </p>
-      </div>
     </div>
   );
 }
