@@ -1,9 +1,19 @@
-import Dashboard from "@/components/Dashboard";
+import HeroSection from '@/components/HeroSection';
+import ConceptsSection from '@/components/ConceptsSection';
+import DashboardSection from '@/components/DashboardSection';
+import SideNav from '@/components/SideNav';
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gray-50 py-8">
-      <Dashboard />
-    </main>
+    <>
+      <SideNav />
+      <main>
+        {/* Zone A: Editorial Intro */}
+        <HeroSection />
+        <ConceptsSection />
+        {/* Zone B: Interactive Dashboard */}
+        <DashboardSection />
+      </main>
+    </>
   );
 }

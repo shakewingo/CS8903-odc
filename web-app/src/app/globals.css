@@ -1,26 +1,364 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
 
+/* ── Design Tokens ── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Backgrounds */
+  --bg-warm: #FAF7F2;
+  --bg-cream: #F5F0E8;
+  --bg-dark: #0C1B2A;
+  --bg-dark-card: #132238;
+  --bg-card: #FFFFFF;
+
+  /* Text */
+  --text-primary: #1A1A2E;
+  --text-secondary: #5A5A72;
+  --text-muted: #8A8A9A;
+  --text-on-dark: #E8E6E1;
+  --text-on-dark-muted: #9AABBF;
+
+  /* Accents */
+  --accent-green: #1B6B4A;
+  --accent-green-light: #2A9D6F;
+  --accent-gold: #C49A2A;
+  --accent-blue: #2E86AB;
+  --accent-terra: #C4653F;
+
+  /* Borders */
+  --border-warm: #E5E0D5;
+  --border-dark: #1E3350;
+
+  /* Land cover colors (from config.py) */
+  --lc-water: #419bdf;
+  --lc-trees: #397d49;
+  --lc-flooded: #7a87c6;
+  --lc-crops: #e49635;
+  --lc-built: #c4281b;
+  --lc-bare: #a59b8f;
+  --lc-snow: #a8ebff;
+  --lc-clouds: #616161;
+  --lc-rangeland: #e3e2c3;
+
+  /* Fonts */
+  --font-display: var(--font-crimson-pro);
+  --font-body: var(--font-manrope);
+
+  /* Spacing */
+  --section-py: 6rem;
+  --content-max: 76rem;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg-warm: var(--bg-warm);
+  --color-bg-cream: var(--bg-cream);
+  --color-bg-dark: var(--bg-dark);
+  --color-bg-dark-card: var(--bg-dark-card);
+  --color-bg-card: var(--bg-card);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-on-dark: var(--text-on-dark);
+  --color-text-on-dark-muted: var(--text-on-dark-muted);
+  --color-accent-green: var(--accent-green);
+  --color-accent-green-light: var(--accent-green-light);
+  --color-accent-gold: var(--accent-gold);
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-terra: var(--accent-terra);
+  --color-border-warm: var(--border-warm);
+  --color-border-dark: var(--border-dark);
+  --color-lc-water: var(--lc-water);
+  --color-lc-trees: var(--lc-trees);
+  --color-lc-flooded: var(--lc-flooded);
+  --color-lc-crops: var(--lc-crops);
+  --color-lc-built: var(--lc-built);
+  --color-lc-bare: var(--lc-bare);
+  --color-lc-rangeland: var(--lc-rangeland);
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── Base ── */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-warm);
+  color: var(--text-primary);
+  font-family: var(--font-body), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Section utilities ── */
+.section-light {
+  background: var(--bg-warm);
+  color: var(--text-primary);
+}
+
+.section-cream {
+  background: var(--bg-cream);
+  color: var(--text-primary);
+}
+
+.section-cream-compact {
+  background: var(--bg-cream);
+  color: var(--text-primary);
+}
+
+.section-cream-compact .section-inner {
+  padding: 3rem 2rem;
+}
+
+.section-dark {
+  background: var(--bg-dark);
+  color: var(--text-on-dark);
+}
+
+.section-inner {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--section-py) 2rem;
+}
+
+/* ── Typography ── */
+.heading-display {
+  font-family: var(--font-display), Georgia, serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.heading-section {
+  font-family: var(--font-display), Georgia, serif;
+  font-weight: 500;
+  font-size: 2rem;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  margin-bottom: 1rem;
+}
+
+.heading-sub {
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent-green);
+}
+
+/* ── Heatmap cell ── */
+.heatmap-cell {
+  position: relative;
+  border-radius: 4px;
+  overflow: hidden;
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.heatmap-cell:hover {
+  transform: scale(1.08);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+  z-index: 10;
+}
+
+.heatmap-cell .fraction-bar {
+  height: 5px;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+/* ── Tooltip ── */
+.info-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--border-warm);
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: help;
+  font-weight: 700;
+}
+
+.info-tooltip:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-dark);
+  color: var(--text-on-dark);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 400;
+  white-space: normal;
+  width: max-content;
+  max-width: 260px;
+  line-height: 1.5;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+/* ── Scroll indicator ── */
+@keyframes scroll-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(6px); }
+}
+
+.scroll-indicator {
+  animation: scroll-bounce 2s ease-in-out infinite;
+}
+
+/* ── Grain overlay ── */
+.grain-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Side navigation ── */
+.side-nav {
+  position: fixed;
+  right: 1.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.side-nav-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border-warm);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.side-nav-dot.active {
+  background: var(--accent-green);
+  transform: scale(1.3);
+}
+
+.side-nav-dot:hover {
+  background: var(--accent-green-light);
+  transform: scale(1.2);
+}
+
+/* ── Map placeholder ── */
+.map-placeholder {
+  background:
+    radial-gradient(ellipse 60% 70% at 55% 45%, var(--lc-water) 0%, transparent 70%),
+    linear-gradient(135deg, var(--lc-trees) 0%, var(--lc-rangeland) 40%, var(--lc-bare) 100%);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── Experiment card ── */
+.exp-card {
+  border: 2px solid var(--border-dark);
+  border-radius: 12px;
+  padding: 1.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--bg-dark-card);
+}
+
+.exp-card:hover {
+  border-color: var(--accent-green);
+}
+
+.exp-card.selected {
+  border-color: var(--accent-green);
+  background: linear-gradient(135deg, rgba(27,107,74,0.12), rgba(27,107,74,0.04));
+}
+
+/* ── Loading pulse ── */
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2); opacity: 0; }
+}
+
+.loading-ring {
+  position: relative;
+}
+
+.loading-ring::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-green);
+  animation: pulse-ring 1.5s ease-out infinite;
+}
+
+/* ── Leaflet overrides for dark theme ── */
+.leaflet-container {
+  font-family: var(--font-body), system-ui, sans-serif;
+}
+
+.leaflet-control-zoom a {
+  background: var(--bg-dark-card) !important;
+  color: var(--text-on-dark) !important;
+  border-color: var(--border-dark) !important;
+}
+
+.leaflet-control-attribution {
+  background: rgba(12, 27, 42, 0.7) !important;
+  color: var(--text-on-dark-muted) !important;
+  font-size: 10px !important;
+}
+
+.leaflet-control-attribution a {
+  color: var(--accent-green-light) !important;
+}
+
+/* ── Table ── */
+.results-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.results-table th {
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 2px solid var(--border-dark);
+  color: var(--text-on-dark-muted);
+}
+
+.results-table td {
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border-dark);
+}
+
+.results-table tr:hover td {
+  background: rgba(46, 134, 171, 0.06);
 }
