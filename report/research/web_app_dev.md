@@ -301,9 +301,183 @@ I like it overall! Just few things:
 - Summary stats (cells changed, ESV gain, etc.) come from actual model inference
 - Rankings table shows real ESV change data per cell
 
-### Vercel Deployment
-The app is deployable to Vercel as a static Next.js site:
+### Vercel Deployment (Static Demo)
+The static demo (pre-computed data for one center) is deployable to Vercel:
 1. `cd web-app && npm run build` produces a static export
 2. Push to GitHub and connect the repo to Vercel
 3. Set the root directory to `web-app` in Vercel project settings
-4. All data files in `public/data/` are served as static assets -- Feedback: when hovering the question mark, I cannot see the full text (see ss in ./report/research/hover_text.png). Plus, remove the view and W&B link, but using the same "Read-only" thing
+4. All data files in `public/data/` are served as static assets
+
+---
+
+## Phase 2: Backend API for Dynamic Study Areas
+
+### Problem
+Currently, grid data and inference results are pre-computed for a single center point `(-13.934564, 34.542859)` and served as static JSON. When a user clicks a different location on the map, there is no backend to:
+1. Generate a new 50x50 grid of land cover fractions for that area
+2. Run model inference on the new grid
+3. Return the before/after results
+
+### Architecture
+
+```
+┌─────────────────┐       ┌─────────────────────────────┐
+│  Next.js (Vercel)│       │  FastAPI Backend (Cloud Run) │
+│                 │       │                             │
+│  Click map ─────┼──────►│  POST /api/grid             │
+│                 │       │   ├─ Load masked GeoTIFF     │
+│  Receive grid ◄─┼───────│   ├─ Downsample + grid cells│
+│  + heatmap      │       │   └─ Return JSON grid       │
+│                 │       │                             │
+│  Select exp ────┼──────►│  POST /api/infer            │
+│                 │       │   ├─ Load pre-trained model  │
+│  Receive ◄──────┼───────│   ├─ Build env + run agent  │
+│  before/after   │       │   └─ Return before/after    │
+└─────────────────┘       └─────────────────────────────┘
+```
+
+### Tech Stack
+| Layer | Choice | Rationale |
+|-------|--------|-----------|
+| Backend framework | **FastAPI** (Python) | All ML code (rasterio, numpy, SB3) is Python. FastAPI is async, lightweight, auto-docs. |
+| Grid generation | `rasterio` + `pyproj` + `shapely` | Already used in `notebook/landcover.ipynb` and `src/dataset.py`. Reads masked GeoTIFFs. |
+| Model inference | `sb3_contrib.MaskablePPO` | Pre-trained models loaded from `models/<run_id>/model.zip`. No retraining needed. |
+| Hosting | **Google Cloud Run** or **Railway** | Serverless containers. Needs ~1GB RAM for model + raster ops. Vercel can't run Python. |
+| Data storage | GeoTIFF files on container disk | `data/processed/malawi_masked_2024.tif` (~50MB). Pre-baked into Docker image. |
+| Caching | **In-memory LRU** + optional **Redis** | Cache grid results by center coordinates (rounded to 3 decimals). Inference ~5-10s per experiment. |
+
+### API Endpoints
+
+#### `POST /api/grid`
+Generate a 50x50 land cover grid for a given center point.
+
+**Request:**
+```json
+{
+  "lat": -13.934564,
+  "lng": 34.542859,
+  "grid_size": 50,
+  "sample_rate": 0.1,
+  "year": 2024
+}
+```
+
+**Response:**
+```json
+{
+  "rows": 50,
+  "cols": 50,
+  "center": { "lat": -13.934564, "lng": 34.542859 },
+  "grid": [
+    [{ "f": { "1": 0.45, "2": 0.30, ... }, "e": 342.5, "lat": -14.1, "lng": 34.3 }, ...]
+  ],
+  "ecoValues": { "1": 554, "2": 238, ... }
+}
+```
+
+**Pipeline (reuses `src/dataset.py:build_grid` + `src/post_eda.py`):**
+1. Receive center lat/lng
+2. Validate point is within the 25km lake buffer polygon
+3. Open `malawi_masked_2024.tif`, downsample at `sample_rate`
+4. Create 50x50 grid of cells centered on the point
+5. For each cell: compute land cover class pixel counts, fractions, weighted ESV
+6. Return JSON grid
+
+**Latency:** ~5-15 seconds (raster I/O + downsampling)
+
+#### `POST /api/infer`
+Run model inference on a grid for a selected experiment.
+
+**Request:**
+```json
+{
+  "lat": -13.934564,
+  "lng": 34.542859,
+  "experiment": "exp2"
+}
+```
+
+**Response:**
+```json
+{
+  "experiment": "exp2",
+  "before": [[...], ...],
+  "after": [[...], ...],
+  "changedCells": [[3, 7], [5, 2], ...],
+  "esvChanges": [
+    { "row": 3, "col": 7, "fromType": 11, "toType": 2, "esvDelta": 54.2 }
+  ],
+  "summary": {
+    "cellsChanged": 13,
+    "totalEsvGain": 156.3,
+    "maxCellGain": 54.2,
+    "pctAreaModified": 0.5
+  }
+}
+```
+
+**Pipeline (reuses `src/eval.py`):**
+1. Generate grid (or use cached grid from `/api/grid`)
+2. Build `rl_dataset.npz`-equivalent arrays in memory
+3. Load pre-trained model for the selected experiment
+4. Create `LandUseEnv`, run `run_inference()` on all samples
+5. `reconstruct_map()` → compute diffs → return JSON
+
+**Latency:** ~10-30 seconds (model inference over 25 samples)
+
+### Implementation TODO
+
+- [ ] **1. Create FastAPI app skeleton**
+  - `backend/main.py` — FastAPI app with CORS, health check
+  - `backend/requirements.txt` — fastapi, uvicorn, rasterio, numpy, pyproj, shapely, stable-baselines3, sb3-contrib
+  - `backend/Dockerfile` — Python 3.11, GDAL libs for rasterio
+
+- [ ] **2. Implement `/api/grid` endpoint**
+  - Extract grid generation logic from `src/dataset.py:build_grid()` and `src/post_eda.py:compute_economic_grid()`
+  - Accept center lat/lng, validate within buffer polygon
+  - Return JSON grid with fractions, ESV, coordinates
+  - Add LRU cache (key: rounded lat/lng)
+
+- [ ] **3. Implement `/api/infer` endpoint**
+  - Reuse `src/eval.py:make_env`, `run_inference`, `reconstruct_map`
+  - Load models from `models/<run_id>/model.zip` (pre-loaded at startup)
+  - Accept experiment ID + center coordinates
+  - Return before/after grids + diffs + rankings
+  - Add LRU cache (key: experiment + rounded lat/lng)
+
+- [ ] **4. Add loading states to frontend**
+  - Show progress/spinner in heatmap area while `/api/grid` runs (~5-15s)
+  - Show progress in results area while `/api/infer` runs (~10-30s)
+  - Cancel in-flight requests when user clicks a new location
+
+- [ ] **5. Connect frontend to backend API**
+  - `DashboardSection`: on map click → call `/api/grid` → update heatmap
+  - On experiment select → call `/api/infer` → update after grid + results
+  - Environment variable for API base URL (`NEXT_PUBLIC_API_URL`)
+
+- [ ] **6. Dockerize + deploy backend**
+  - Build Docker image with GDAL + rasterio + SB3
+  - Include `data/processed/malawi_masked_2024.tif` and `models/` in image
+  - Deploy to Cloud Run (or Railway) with ~1GB RAM, 2 vCPU
+  - Set up CORS to allow Vercel frontend origin
+
+- [ ] **7. Caching strategy**
+  - In-memory LRU for grid + inference results
+  - Pre-compute grids for popular coordinates (lake center, Mangochi, etc.)
+  - Optional: Redis for persistent cache across container restarts
+
+### Data Dependencies (must be in Docker image)
+```
+data/processed/malawi_masked_2024.tif   (~50 MB, Sentinel-2 land cover)
+data/processed/lake_malawi_expanded_25km.json  (buffer boundary for validation)
+data/raw/lake_malawi.json               (original lake boundary)
+models/6f0ta58i/model.zip               (Exp I, 2.9 MB)
+models/2sk0pnp3/model.zip               (Exp II, 2.9 MB)
+models/pzy2mxod/model.zip               (Exp III, 2.9 MB)
+```
+
+### Frontend Changes Needed
+- `DashboardSection.tsx`: Replace static `fetch('/data/grid_data.json')` with `fetch(API_URL + '/api/grid', { method: 'POST', body: ... })`
+- Add loading/error states for API calls
+- Debounce map clicks (prevent rapid-fire API calls)
+- Show "Generating grid..." and "Running inference..." progress indicators
