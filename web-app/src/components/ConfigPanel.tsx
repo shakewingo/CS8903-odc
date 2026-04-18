@@ -1,6 +1,6 @@
 'use client';
 
-import { Info, FlaskConical } from 'lucide-react';
+import { Info, FlaskConical, Lock } from 'lucide-react';
 
 const EXPERIMENTS_CONFIG: Record<string, { title: string; wandb: string; config: Record<string, string | number | boolean> }> = {
   exp1: {
@@ -55,14 +55,10 @@ export default function ConfigPanel({ selectedExp }: ConfigPanelProps) {
       <div className="flex items-center gap-2 mb-4">
         <FlaskConical size={14} className="text-accent-green" />
         <span className="text-xs font-semibold text-text-on-dark">{exp.title}</span>
-        <a
-          href={`https://wandb.ai/shakewin/CS8903-odc/runs/${exp.wandb}/overview`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="ml-auto text-xs text-accent-green hover:text-accent-green-light transition-colors"
-        >
-          View on W&B →
-        </a>
+        <div className="flex items-center gap-1.5 text-xs text-text-on-dark-muted ml-auto">
+          <Lock size={11} />
+          <span>Read-only</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
