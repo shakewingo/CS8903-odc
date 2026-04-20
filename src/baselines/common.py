@@ -18,7 +18,7 @@ For env-state snapshot/restore (used by GA), call `env.get_state_dict()` /
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, Literal, Optional
+from typing import Literal, Optional, Protocol
 
 import numpy as np
 
@@ -111,11 +111,13 @@ def reset_to_index(env, idx: int, max_consecutive_noops_override: Optional[int] 
     }
 
 
-ActFn = Callable[[object], int]
+class Agent(Protocol):
+    """A baseline agent is a callable picking the next action given an env."""
+    def __call__(self, env) -> int: ...
 
 
 def run_episode(
-    act_fn: ActFn,
+    act_fn: Agent,
     env,
     idx: int,
     max_consecutive_noops_override: Optional[int] = None,

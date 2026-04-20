@@ -113,9 +113,6 @@ class GeneticAgent:
     def __call__(self, env) -> int:
         return int(self._current_chromosome[env.step_count])
 
-    def reset(self, env):
-        pass
-
     # ── Operators ─────────────────────────────────────────────────────
     def _tournament_select(self, pop: list[np.ndarray], scores: np.ndarray) -> np.ndarray:
         k = min(self.tournament_k, len(pop))
