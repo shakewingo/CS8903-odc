@@ -94,8 +94,12 @@ def parse_args():
 
 
 def make_env(args, split):
-    """Create a V2 evaluation environment with no augmentation."""
-    return LandUseEnvV2(
+    """Create a V2 evaluation environment with no augmentation.
+
+    Calls env.reset(seed=SEED) so `self.samples` is populated via augment_data —
+    required by reset_to_index in run_inference.
+    """
+    env = LandUseEnvV2(
         split=split,
         max_steps=getattr(args, "max_steps", 500),
         spatial_scale=getattr(args, "spatial_scale", 1.0),
@@ -111,6 +115,8 @@ def make_env(args, split):
         pixels_per_transfer=getattr(args, "pixels_per_transfer", 5),
         max_consecutive_noops=getattr(args, "max_consecutive_noops", 10),
     )
+    env.reset(seed=SEED)
+    return env
 
 
 def compute_diff_cells(initial_obs, final_obs_recst, atol=1e-6):
