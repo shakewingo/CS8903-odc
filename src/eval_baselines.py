@@ -48,9 +48,6 @@ from src.baselines.greedy_agent import GreedyAgent
 from src.baselines.genetic_agent import GeneticAgent
 
 
-ALL_METHODS = ("random", "greedy", "genetic", "ppo")
-
-
 # ── PPO wrapper ────────────────────────────────────────────────────────
 class PPOAgent:
     """Wraps a loaded MaskablePPO model to match the baseline act_fn interface."""
@@ -68,37 +65,45 @@ class PPOAgent:
         return int(action)
 
 
+# ── Method registry ────────────────────────────────────────────────────
+def _make_random(args, env, ppo_model, ga_kwargs):
+    return RandomAgent(seed=args.seed)
+
+
+def _make_greedy(args, env, ppo_model, ga_kwargs):
+    return GreedyAgent()
+
+
+def _make_genetic(args, env, ppo_model, ga_kwargs):
+    return GeneticAgent(seed=args.seed, **ga_kwargs)
+
+
+def _make_ppo(args, env, ppo_model, ga_kwargs):
+    assert ppo_model is not None, "PPO method requires --ppo-model"
+    return PPOAgent(ppo_model, deterministic=True)
+
+
+METHOD_REGISTRY = {
+    "random":  {"factory": _make_random,  "needs_solve": False, "noops_override": None},
+    "greedy":  {"factory": _make_greedy,  "needs_solve": False, "noops_override": None},
+    "genetic": {"factory": _make_genetic, "needs_solve": True,  "noops_override": "horizon_plus_1"},
+    "ppo":     {"factory": _make_ppo,     "needs_solve": False, "noops_override": None},
+}
+ALL_METHODS = tuple(METHOD_REGISTRY.keys())
+
+
 # ── Episode driver ─────────────────────────────────────────────────────
-def evaluate_method(
-    method: str,
-    env,
-    n_episodes: int,
-    ppo_model=None,
-    ga_kwargs: dict | None = None,
-    seed: int = 0,
-    verbose: bool = True,
-) -> list[dict]:
+def evaluate_method(method, args, env, ppo_model, ga_kwargs, verbose=True):
+    spec = METHOD_REGISTRY[method]
+    agent = spec["factory"](args, env, ppo_model, ga_kwargs)
+    noops_override = env.max_steps + 1 if spec["noops_override"] == "horizon_plus_1" else spec["noops_override"]
+
     records: list[dict] = []
-
-    if method == "random":
-        agent = RandomAgent(seed=seed)
-        noops_override = None
-    elif method == "greedy":
-        agent = GreedyAgent()
-        noops_override = None
-    elif method == "genetic":
-        agent = GeneticAgent(seed=seed, **(ga_kwargs or {}))
-        noops_override = env.max_steps + 1
-    elif method == "ppo":
-        assert ppo_model is not None, "PPO method requires --ppo-model"
-        agent = PPOAgent(ppo_model, deterministic=True)
-        noops_override = None
-    else:
-        raise ValueError(f"unknown method: {method}")
-
     t0 = time.time()
+    n_episodes = args.n_episodes or len(env.samples)
+    n_episodes = min(n_episodes, len(env.samples))
     for ep in range(n_episodes):
-        if method == "genetic":
+        if spec["needs_solve"]:
             agent.solve(env, ep)
         metrics = run_episode(agent, env, ep, max_consecutive_noops_override=noops_override)
         metrics["method"] = method
@@ -111,7 +116,6 @@ def evaluate_method(
                   f"steps={metrics['steps']}, "
                   f"term={metrics['termination_reason']}, "
                   f"elapsed={elapsed:.1f}s")
-
     return records
 
 
@@ -249,15 +253,7 @@ def main():
 
     for method in args.methods:
         print(f"\n=== Method: {method} ===")
-        records = evaluate_method(
-            method=method,
-            env=env,
-            n_episodes=n_episodes,
-            ppo_model=ppo_model,
-            ga_kwargs=ga_kwargs,
-            seed=args.seed,
-            verbose=True,
-        )
+        records = evaluate_method(method, args, env, ppo_model, ga_kwargs, verbose=True)
         summary = aggregate(records)
         per_method[method] = summary
         all_records.extend(records)
