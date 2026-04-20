@@ -274,6 +274,8 @@ class LandUseEnvV2(gym.Env):
         return total_values, spatial_value, tree_n, crop_n, built_n, buf_n
 
     def _compute_total_et(self) -> float:
+        if ET_MOD is None or not ET_MOD.any():
+            return 0.0
         return float((self.state.reshape(-1, N_MOD) @ ET_MOD).sum())
 
     def _compute_spatial_normalized(self):
