@@ -43,6 +43,7 @@ from src.config import (
     N_CLASSES, N_PIXELS_PER_CELL, SEED, data_dir, log_dir,
 )
 from src.post_eda import plot_state_heatmap
+from src.baselines.common import reset_to_index
 from src.train_v2 import LandUseEnvV2, MODIFIABLE_CLASSES, build_value_vecs
 from src.utils import minmax_normalize, get_logger
 
@@ -125,10 +126,8 @@ def run_inference(model, env, data, split_key, deterministic=False):
 
     for ep in range(len(indices)):
         coord_idx = indices[ep]
-        _, _ = env.reset()
-        obs = env._get_obs(ep).copy()
-        env.prev_total_value = env._compute_total_value()[0]
-        env.initial_total_et = env._compute_total_et()
+        reset_to_index(env, ep)
+        obs = env.state.copy()
 
         total_reward, done = 0.0, False
         while not done:
