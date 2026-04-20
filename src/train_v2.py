@@ -393,7 +393,7 @@ class LandUseEnvV2(gym.Env):
                                     split=self.split, n_augment=self.n_augment)
         n_cells = self.size * self.size
         for _ in range(100):
-            idx = self.np_random.integers(self.samples.shape[0] - 1)
+            idx = self.np_random.integers(self.samples.shape[0])
             self.state = self._get_obs(idx).copy()
             mod_frac = np.count_nonzero(self.state.sum(axis=2)) / n_cells
             if mod_frac >= self.min_mod_frac:
