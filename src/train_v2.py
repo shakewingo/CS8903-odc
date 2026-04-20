@@ -355,6 +355,35 @@ class LandUseEnvV2(gym.Env):
         self.state[r, c, tgt] = orig_tgt
         return new_total - self.prev_total_value
 
+    def get_state_dict(self) -> dict:
+        """Snapshot of mutable env state that step() can change.
+
+        Used by GA fitness replay. `samples` / `data` are set at reset() time
+        and shared across episodes, so they're deliberately excluded.
+        """
+        return {
+            "state": self.state.copy(),
+            "_protected_water": self._protected_water.copy(),
+            "step_count": self.step_count,
+            "consecutive_noops": self.consecutive_noops,
+            "prev_total_value": self.prev_total_value,
+            "prev_spatial_value": self.prev_spatial_value,
+            "prev_spatial": self.prev_spatial,
+            "initial_total_et": self.initial_total_et,
+            "max_consecutive_noops": self.max_consecutive_noops,
+        }
+
+    def set_state_dict(self, snapshot: dict) -> None:
+        self.state = snapshot["state"].copy()
+        self._protected_water = snapshot["_protected_water"].copy()
+        self.step_count = snapshot["step_count"]
+        self.consecutive_noops = snapshot["consecutive_noops"]
+        self.prev_total_value = snapshot["prev_total_value"]
+        self.prev_spatial_value = snapshot["prev_spatial_value"]
+        self.prev_spatial = snapshot["prev_spatial"]
+        self.initial_total_et = snapshot["initial_total_et"]
+        self.max_consecutive_noops = snapshot["max_consecutive_noops"]
+
     # ── reset / step ────────────────────────────────────────────────
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)

@@ -11,10 +11,12 @@ Provides:
   action-selection callable and returns a metrics dict.
 - `aggregate(records)` — turns a list of per-episode records into mean±std
   summary stats.
+
+For env-state snapshot/restore (used by GA), call `env.get_state_dict()` /
+`env.set_state_dict(snapshot)` directly — ownership lives with the env.
 """
 from __future__ import annotations
 
-import copy
 from pathlib import Path
 from typing import Callable, Literal, Optional
 
@@ -197,29 +199,3 @@ def aggregate(records: list[dict]) -> dict:
     return out
 
 
-# ── Utilities ──────────────────────────────────────────────────────────
-def snapshot_env_state(env):
-    """Deep-copy the mutable parts of env for fitness replay (used by GA)."""
-    return {
-        "state": env.state.copy(),
-        "_protected_water": env._protected_water.copy(),
-        "step_count": env.step_count,
-        "consecutive_noops": env.consecutive_noops,
-        "prev_total_value": env.prev_total_value,
-        "prev_spatial_value": env.prev_spatial_value,
-        "prev_spatial": env.prev_spatial,
-        "initial_total_et": env.initial_total_et,
-        "max_consecutive_noops": env.max_consecutive_noops,
-    }
-
-
-def restore_env_state(env, snapshot):
-    env.state = snapshot["state"].copy()
-    env._protected_water = snapshot["_protected_water"].copy()
-    env.step_count = snapshot["step_count"]
-    env.consecutive_noops = snapshot["consecutive_noops"]
-    env.prev_total_value = snapshot["prev_total_value"]
-    env.prev_spatial_value = snapshot["prev_spatial_value"]
-    env.prev_spatial = snapshot["prev_spatial"]
-    env.initial_total_et = snapshot["initial_total_et"]
-    env.max_consecutive_noops = snapshot["max_consecutive_noops"]
