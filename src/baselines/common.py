@@ -22,11 +22,8 @@ from typing import Callable, Literal, Optional
 
 import numpy as np
 
-from src.config import (
-    ECO_VALUES, ET_VALUES,
-    N_CLASSES, SEED, data_dir, log_dir,
-)
-from src.utils import get_logger, minmax_normalize
+from src.config import SEED, log_dir
+from src.utils import get_logger
 
 
 # ── Env factory ────────────────────────────────────────────────────────
@@ -58,26 +55,7 @@ def make_eval_env(
     """
     import src.train_v2 as tv2
 
-    eco_values = dict(ECO_VALUES)
-    if eco_variant == "regen":
-        eco_values[5] = ECO_VALUES[5] * 1.35
-
-    et_values = ET_VALUES if use_et else {k: 0 for k in ET_VALUES}
-
-    norm_eco = minmax_normalize(eco_values)
-    norm_et = minmax_normalize(et_values)
-
-    eco_per_class = np.zeros(N_CLASSES, dtype=np.float32)
-    et_per_class = np.zeros(N_CLASSES, dtype=np.float32)
-    for cls, val in norm_eco.items():
-        if cls < N_CLASSES:
-            eco_per_class[cls] = val
-    for cls, val in norm_et.items():
-        if cls < N_CLASSES:
-            et_per_class[cls] = val
-
-    tv2.ECO_MOD = eco_per_class[tv2.MODIFIABLE_CLASSES]
-    tv2.ET_MOD = et_per_class[tv2.MODIFIABLE_CLASSES]
+    tv2.build_value_vecs(eco_variant=eco_variant, use_et=use_et, assign_globals=True)
     tv2.logger = get_logger(
         log_name,
         log_file=str(Path(log_dir, f"{log_name}.log")),

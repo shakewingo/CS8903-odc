@@ -530,9 +530,46 @@ class SpatialMetricsCallback(BaseCallback):
                 buf.clear()
 
 
+def build_value_vecs(
+    eco_variant: Literal["standard", "regen"] = "standard",
+    use_et: bool = False,
+    assign_globals: bool = True,
+):
+    """Construct normalised per-class eco/ET value vectors.
+
+    The `regen` variant multiplies the crops eco value (class 5) by 1.35 before
+    normalisation — this is the Exp III reward config. When `assign_globals` is
+    True, writes module-level `ECO_MOD` / `ET_MOD` so a freshly-constructed env
+    computes rewards consistently.
+    """
+    eco_values = dict(ECO_VALUES)
+    if eco_variant == "regen":
+        eco_values[5] = ECO_VALUES[5] * 1.35
+    et_values = ET_VALUES if use_et else {k: 0 for k in ET_VALUES}
+
+    norm_eco = minmax_normalize(eco_values)
+    norm_et = minmax_normalize(et_values)
+
+    eco_per_class = np.zeros(N_CLASSES, dtype=np.float32)
+    et_per_class = np.zeros(N_CLASSES, dtype=np.float32)
+    for cls, val in norm_eco.items():
+        if cls < N_CLASSES:
+            eco_per_class[cls] = val
+    for cls, val in norm_et.items():
+        if cls < N_CLASSES:
+            et_per_class[cls] = val
+
+    if assign_globals:
+        global ECO_MOD, ET_MOD
+        ECO_MOD = eco_per_class[MODIFIABLE_CLASSES]
+        ET_MOD = et_per_class[MODIFIABLE_CLASSES]
+
+    return eco_per_class, et_per_class
+
+
 # ── Main ───────────────────────────────────────────────────────────────
 def main():
-    global ECO_MOD, ET_MOD, logger
+    global logger
 
     args = parse_args()
 
@@ -544,25 +581,9 @@ def main():
     )
 
     # ── Value vectors ───────────────────────────────────────────────
-    if args.use_et:
-        et_values = ET_VALUES
-    else:
-        et_values = {k: 0 for k in ET_VALUES}
-
-    norm_et = minmax_normalize(et_values)
-    norm_eco = minmax_normalize(ECO_VALUES)
-
-    eco_per_class = np.zeros(N_CLASSES, dtype=np.float32)
-    et_per_class = np.zeros(N_CLASSES, dtype=np.float32)
-    for cls, val in norm_eco.items():
-        if cls < N_CLASSES:
-            eco_per_class[cls] = val
-    for cls, val in norm_et.items():
-        if cls < N_CLASSES:
-            et_per_class[cls] = val
-
-    ECO_MOD = eco_per_class[MODIFIABLE_CLASSES]
-    ET_MOD = et_per_class[MODIFIABLE_CLASSES]
+    eco_per_class, et_per_class = build_value_vecs(
+        eco_variant="standard", use_et=args.use_et, assign_globals=True,
+    )
 
     print(f"Modifiable classes: {MODIFIABLE_CLASSES}  (n={N_MOD})")
     print(f"Joint action space: Discrete({10*10*N_MOD*N_MOD})")
