@@ -14,7 +14,7 @@ that adapts to state would be.
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 
@@ -41,17 +41,13 @@ class GeneticAgent:
         self.n_elite = n_elite
         self.rng = np.random.default_rng(seed)
         self.verbose = verbose
-        self._current_chromosome: Optional[np.ndarray] = None
         self._action_dim: Optional[int] = None
 
     # ── Main solve loop ───────────────────────────────────────────────
-    def solve(self, env, idx: int) -> np.ndarray:
+    def solve(self, env, idx: int) -> Callable:
         """Evolve the best chromosome for `env.samples[idx]`.
 
-        Post-condition: env is positioned at the test grid with counters
-        zeroed and `max_consecutive_noops` set high — ready for the caller
-        to invoke `run_episode(act_fn, env, idx, max_consecutive_noops_override=...)`
-        which will reset_to_index again.
+        Returns an act_fn closure that `run_episode` can call each step.
         """
         horizon = env.max_steps
         high_noops = horizon + 1
@@ -103,15 +99,14 @@ class GeneticAgent:
 
         best_idx = int(np.argmax(scores))
         best_chromosome = pop[best_idx]
-        self._current_chromosome = best_chromosome
 
         # Leave env in a deterministic state; caller will reset_to_index again.
         env.set_state_dict(initial_snapshot)
-        return best_chromosome
 
-    # ── Act-fn (called by run_episode each step) ──────────────────────
-    def __call__(self, env) -> int:
-        return int(self._current_chromosome[env.step_count])
+        def act_fn(env) -> int:
+            return int(best_chromosome[env.step_count])
+        act_fn.chromosome = best_chromosome
+        return act_fn
 
     # ── Operators ─────────────────────────────────────────────────────
     def _tournament_select(self, pop: list[np.ndarray], scores: np.ndarray) -> np.ndarray:
@@ -129,9 +124,8 @@ class GeneticAgent:
         return c1, c2
 
     def _mutate(self, chromosome: np.ndarray) -> None:
-        """In-place uniform mutation: resample each selected gene uniformly
-        over the full discrete action space. Most resamples will be masked-out
-        at replay (→ no-op), which is the intended exploration mechanism."""
+        # Most mutations hit masked-invalid genes and become no-ops at replay —
+        # that's the intended exploration mechanism, not a bug.
         mut_mask = self.rng.random(len(chromosome)) < self.mutation_prob
         n_mut = int(mut_mask.sum())
         if n_mut == 0:

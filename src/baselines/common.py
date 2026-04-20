@@ -164,7 +164,6 @@ def run_episode(
 
 # ── Aggregation ────────────────────────────────────────────────────────
 def aggregate(records: list[dict]) -> dict:
-    """Reduce per-episode records to a summary dict (mean, std, success rate)."""
     if not records:
         return {}
     keys = ("delta_total_value", "delta_pct", "final_eco", "final_spatial_value",

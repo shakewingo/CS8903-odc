@@ -103,9 +103,8 @@ def evaluate_method(method, args, env, ppo_model, ga_kwargs, verbose=True):
     n_episodes = args.n_episodes or len(env.samples)
     n_episodes = min(n_episodes, len(env.samples))
     for ep in range(n_episodes):
-        if spec["needs_solve"]:
-            agent.solve(env, ep)
-        metrics = run_episode(agent, env, ep, max_consecutive_noops_override=noops_override)
+        act_fn = agent.solve(env, ep) if spec["needs_solve"] else agent
+        metrics = run_episode(act_fn, env, ep, max_consecutive_noops_override=noops_override)
         metrics["method"] = method
         records.append(metrics)
         if verbose:
