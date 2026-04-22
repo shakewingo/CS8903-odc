@@ -1,23 +1,20 @@
 #!/usr/bin/env python3
-"""
-Evaluate a trained MaskablePPO V2 agent (joint Discrete action space).
+"""Evaluate an agent over the test/train split and render a before/after
+heatmap of the resulting land-use allocation.
 
-V2 changes vs. eval.py:
-- Uses LandUseEnvV2 + MODIFIABLE_CLASSES from src.train_v2.
-- Writes ECO_MOD / ET_MOD globals into src.train_v2 (not src.train).
-- action_masks is the 4900-long joint mask (per-cell src availability +
-  target saturation + src != tgt); MaskablePPO.predict consumes it the
-  same way as the MultiDiscrete case.
+Supports --method {ppo, greedy, random, genetic}. Reward-config flags
+(--w-tree/--w-crop/... --riparian-mask) must match training for meaningful
+PPO reward numbers; geometric metrics are reward-independent.
 
 Usage examples:
-    # Evaluate on test split
-    python src/eval_v2.py --model-path models/<run_id>/model.zip --split test
+    # PPO
+    python src/eval_v2.py --method ppo --model-path models/<run_id>/model.zip
 
-    # Deterministic inference (should now work correctly with joint mask)
-    python src/eval_v2.py --model-path models/<run_id>/model.zip --deterministic
+    # Greedy baseline with custom reward
+    python src/eval_v2.py --method greedy --w-crop 4 --w-buf 6 --w-rip 5 --riparian-mask
 
-    # Custom plot name, skip plotting
-    python src/eval_v2.py --model-path models/<run_id>/model.zip --no-plot
+    # Genetic algorithm (slow; ~1-10 min/episode)
+    python src/eval_v2.py --method genetic --ga-pop 20 --ga-gens 20
 """
 
 import argparse
@@ -54,13 +51,31 @@ def parse_args():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    p.add_argument("--model-path", type=str, required=True,
-                   help="Path to saved model.zip")
+    p.add_argument("--method", type=str, default="ppo",
+                   choices=["ppo", "greedy", "random", "genetic"],
+                   help="Which agent to run. 'greedy' is 1-step-optimal via "
+                        "env._simulate_delta. 'random' samples uniformly over "
+                        "legal actions. 'genetic' evolves a per-episode "
+                        "chromosome via GeneticAgent (slow: ~1–10 min/episode "
+                        "depending on --ga-pop / --ga-gens).")
+    p.add_argument("--model-path", type=str, default=None,
+                   help="Path to saved model.zip (required when --method=ppo)")
+
+    # GA knobs — lower than eval_baselines defaults by default since we're
+    # generating a visualization, not a statistical summary.
+    ga_g = p.add_argument_group("Genetic Algorithm (only used when --method=genetic)")
+    ga_g.add_argument("--ga-pop", type=int, default=20)
+    ga_g.add_argument("--ga-gens", type=int, default=20)
+    ga_g.add_argument("--ga-tournament-k", type=int, default=3)
+    ga_g.add_argument("--ga-crossover-prob", type=float, default=0.8)
+    ga_g.add_argument("--ga-mutation-prob", type=float, default=0.02)
+    ga_g.add_argument("--ga-n-elite", type=int, default=2)
+    ga_g.add_argument("--ga-verbose", action="store_true")
     p.add_argument("--split", type=str, default="both",
                    choices=["train", "test", "both"],
                    help="Which data split(s) to evaluate")
     p.add_argument("--deterministic", action="store_true",
-                   help="Use deterministic actions during inference")
+                   help="Use deterministic actions during inference (PPO only)")
 
     # Environment args (defaults match train_v2.py; override if you trained with different values)
     env_g = p.add_argument_group("Environment (must match training)")
@@ -70,6 +85,12 @@ def parse_args():
     env_g.add_argument("--w-crop", type=float, default=3.0)
     env_g.add_argument("--w-built", type=float, default=3.0)
     env_g.add_argument("--w-buf", type=float, default=5.0)
+    env_g.add_argument("--w-rip", type=float, default=0.0,
+                       help="Match training's --w-rip (affects printed reward only; "
+                            "PPO policy itself is frozen on load)")
+    env_g.add_argument("--riparian-mask", action="store_true",
+                       help="Match training's --riparian-mask (affects which actions "
+                            "PPO is allowed to take at eval time)")
     env_g.add_argument("--lambda-et", type=float, default=1.0)
     env_g.add_argument("--reward-scale", type=float, default=1.0)
     env_g.add_argument("--et-dcs-tolerance", type=float, default=1.0)
@@ -94,19 +115,19 @@ def parse_args():
 
 
 def make_env(args, split):
-    """Create a V2 evaluation environment with no augmentation.
-
-    Calls env.reset(seed=SEED) so `self.samples` is populated via augment_data —
-    required by reset_to_index in run_inference.
-    """
+    """Create an eval env (no augmentation) and call reset() to populate
+    `env.samples` so `reset_to_index(env, ep)` in run_inference can address
+    specific grids."""
     env = LandUseEnvV2(
         split=split,
         max_steps=getattr(args, "max_steps", 500),
         spatial_scale=getattr(args, "spatial_scale", 1.0),
-        w_tree=getattr(args, "w_tree", 3.0),
-        w_crop=getattr(args, "w_crop", 1.0),
-        w_built=getattr(args, "w_built", 1.0),
-        w_buf=getattr(args, "w_buf", 2.0),
+        w_tree=getattr(args, "w_tree", 1.0),
+        w_crop=getattr(args, "w_crop", 3.0),
+        w_built=getattr(args, "w_built", 3.0),
+        w_buf=getattr(args, "w_buf", 5.0),
+        w_rip=getattr(args, "w_rip", 0.0),
+        riparian_mask=getattr(args, "riparian_mask", False),
         lambda_et=getattr(args, "lambda_et", 1.0),
         reward_scale=getattr(args, "reward_scale", 1.0),
         n_augment=0,
@@ -125,21 +146,29 @@ def compute_diff_cells(initial_obs, final_obs_recst, atol=1e-6):
     return {(int(r), int(c)) for r, c, _ in np.argwhere(diff_mask)}
 
 
-def run_inference(model, env, data, split_key, deterministic=False):
-    """Run the agent on every sample in the given split. Returns {(r,c): obs}."""
+def run_inference(make_act_fn, env, data, split_key):
+    """Run one episode per sample in `data[split_key]` and collect final obs.
+
+    `make_act_fn(env, ep) -> act_fn` is a factory. For stateless agents (PPO,
+    Greedy, Random) it ignores `ep` and returns the same callable each time.
+    For GA it runs per-episode evolution in `solve(env, ep)` and returns the
+    chromosome-replay closure.
+
+    Returns `{(row, col): final_obs}` keyed by each sample's coord in the
+    50×50 map.
+    """
     indices = data[split_key]
     final_obs = {}
 
     for ep in range(len(indices)):
         coord_idx = indices[ep]
         reset_to_index(env, ep)
-        obs = env.state.copy()
+        act_fn = make_act_fn(env, ep)  # may re-reset env (GA) — idempotent.
+        obs = env.state
 
         total_reward, done = 0.0, False
         while not done:
-            action_masks = env.action_masks()
-            action, _ = model.predict(obs, action_masks=action_masks,
-                                      deterministic=deterministic)
+            action = act_fn(env)
             obs, reward, terminated, truncated, info = env.step(action)
             total_reward += reward
             done = terminated or truncated
@@ -222,28 +251,61 @@ def main():
         log_file=str(Path(log_dir, "eval_v2.log")),
     )
 
-    # ── Load model & data ──────────────────────────────────────────
+    # ── Load data + build act_fn based on --method ─────────────────
     data = np.load(Path(data_dir, "processed", "rl_dataset.npz"))
     final_obs = {}
 
-    # Create a dummy env for loading (SB3 needs it)
-    dummy_env = make_env(args, "test_indices")
-    model = MaskablePPO.load(args.model_path, env=dummy_env)
-    print(f"Loaded V2 model from {args.model_path}")
+    if args.method == "ppo":
+        if args.model_path is None:
+            raise SystemExit("--method=ppo requires --model-path")
+        dummy_env = make_env(args, "test_indices")
+        model = MaskablePPO.load(args.model_path, env=dummy_env)
+        print(f"Loaded V2 model from {args.model_path}")
+        deterministic = args.deterministic
+
+        def ppo_act(env):
+            action, _ = model.predict(env.state,
+                                      action_masks=env.action_masks(),
+                                      deterministic=deterministic)
+            return int(action)
+        make_act_fn = lambda env, ep: ppo_act
+    elif args.method == "greedy":
+        from src.baselines.greedy_agent import GreedyAgent
+        greedy = GreedyAgent()
+        make_act_fn = lambda env, ep: greedy
+        print("Using GreedyAgent (1-step-optimal w.r.t. current reward config)")
+    elif args.method == "random":
+        from src.baselines.random_agent import RandomAgent
+        rand = RandomAgent(seed=args.seed)
+        make_act_fn = lambda env, ep: rand
+        print(f"Using RandomAgent(seed={args.seed})")
+    elif args.method == "genetic":
+        from src.baselines.genetic_agent import GeneticAgent
+        ga = GeneticAgent(
+            pop_size=args.ga_pop,
+            generations=args.ga_gens,
+            tournament_k=args.ga_tournament_k,
+            crossover_prob=args.ga_crossover_prob,
+            mutation_prob=args.ga_mutation_prob,
+            n_elite=args.ga_n_elite,
+            seed=args.seed,
+            verbose=args.ga_verbose,
+        )
+        make_act_fn = lambda env, ep: ga.solve(env, ep)
+        print(f"Using GeneticAgent (pop={args.ga_pop}, gens={args.ga_gens}) — "
+              f"expect ~{args.ga_pop * args.ga_gens} evaluations per episode")
 
     # ── Run inference ──────────────────────────────────────────────
     if args.split in ("test", "both"):
         print("\n=== Test split ===")
         env = make_env(args, "test_indices")
-        test_obs = run_inference(model, env, data, "test_indices",
-                                 deterministic=args.deterministic)
+        test_obs = run_inference(make_act_fn, env, data, "test_indices")
         final_obs.update(test_obs)
 
     if args.split in ("train", "both"):
         print("\n=== Train split ===")
         env = make_env(args, "train_indices")
-        train_obs = run_inference(model, env, data, "train_indices",
-                                  deterministic=args.deterministic)
+        train_obs = run_inference(make_act_fn, env, data, "train_indices")
         final_obs.update(train_obs)
 
     # ── Reconstruct & diff ─────────────────────────────────────────
@@ -252,8 +314,13 @@ def main():
 
     # ── Plot ───────────────────────────────────────────────────────
     if not args.no_plot and diffs:
-        plot_name = args.plot_name or Path(args.model_path).parent.name
-        save_path = Path(args.output_dir, f"{plot_name}_v2.png")
+        if args.plot_name:
+            plot_name = args.plot_name
+        elif args.method != "ppo":
+            plot_name = args.method
+        else:
+            plot_name = Path(args.model_path).parent.name
+        save_path = Path(args.output_dir, f"{plot_name}.png")
         plot_comparison(initial_obs, final_obs_recst, diffs, value_vec, save_path)
 
     print("\nEvaluation complete.")

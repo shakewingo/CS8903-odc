@@ -1,11 +1,12 @@
-"""Random baseline: uniformly sample a legal action at each step."""
+"""Random baseline: uniform-random legal action at each step."""
 from __future__ import annotations
 
 import numpy as np
 
 
 class RandomAgent:
-    """Sample uniformly from `env.action_masks()` legal indices."""
+    """Callable `(env) -> action` that samples uniformly from the legal set
+    given by `env.action_masks()`. Uses a seeded numpy RNG."""
 
     def __init__(self, seed: int = 0):
         self.rng = np.random.default_rng(seed)

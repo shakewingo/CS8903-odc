@@ -1,6 +1,6 @@
-"""Greedy-myopic baseline: pick the legal action with the largest immediate
-`Δ total_value` at each step. Ties broken by np.argmax (first-index-wins)
-for determinism.
+"""Greedy-myopic baseline: at each step, pick the legal action with the
+largest immediate `Δ total_value`. Ties broken deterministically by
+`np.argmax` (first-index-wins).
 """
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ import numpy as np
 
 
 class GreedyAgent:
+    """Callable `(env) -> action` returning the 1-step-optimal legal action."""
+
     def __call__(self, env) -> int:
         mask = env.action_masks()
         valid = np.flatnonzero(mask)

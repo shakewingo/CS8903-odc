@@ -1,24 +1,24 @@
-"""dataset.py – Generate RL training / test datasets
-from the 50×50 economic + ET grids.
+"""Build the RL training / test dataset (`data/processed/rl_dataset.npz`).
 
-Each cell in the 50×50 grid is 5×5 downsampled pixels (500 m × 500 m).
-The breakdown stores land-cover fractions per cell:
-    [(class_id, fraction), ...]
-
-Rewards are computed as:
-    reward = (eco - mean_eco) / std_eco + (et - mean_et) / std_et
-where mean/std are computed across all valid cells.
-
-Samples are non-overlapping 10×10 cell blocks split 70/30 into
-train / test.
+Pipeline:
+1. `build_grid(CENTER, **GRID_KWARGS)` → 50×50 grid of per-class pixel counts,
+   eco values, ET values, a validity mask, and lat/lon coords.
+2. `normalize_and_compute_rewards(...)` → per-cell reward from z-scored
+   eco + ET (stats over valid cells only).
+3. `split_dataset(...)` → non-overlapping 10×10 blocks, shuffled into
+   train (70%) / test (30%) by TRAIN_RATIO.
+4. `save_dataset(...)` → compressed `.npz` archive consumed by train_v2 /
+   eval scripts.
 """
 
-import fractions
 from pathlib import Path
 
 import numpy as np
 
-from config import *
+from src.config import (
+    CENTER, GRID_KWARGS, N_CLASSES, N_PIXELS_PER_CELL,
+    SAMPLE_SIZE, SEED, TRAIN_RATIO, data_dir,
+)
 from src.utils import get_logger
 from src.post_eda import compute_economic_grid, compute_et_grid
 
@@ -73,8 +73,8 @@ def build_grid(center, **grid_kwargs):
             coords[r, c, 0] = eco_cell["center_lat"]
             coords[r, c, 1] = eco_cell["center_lon"]
 
+            # Per-cell pixel breakdown stored as counts (not positions).
             for class_id, frac in eco_cell["breakdown"]:
-                # TODO: not consider pixel position but only counts
                 pixel_counts[r, c, class_id] = round(frac * N_PIXELS_PER_CELL)
 
     n_valid = int(valid_mask.sum())
@@ -193,12 +193,14 @@ def save_dataset(
 
     npz_path = output_dir / "rl_dataset.npz"
  
+    # `rewards` / `norm_stats` are retained for dataset introspection; the RL
+    # env recomputes rewards from pixel_counts, so they are not used at train.
     np.savez_compressed(
         npz_path,
         pixel_counts=pixel_counts,
         eco_values=eco_values,
         et_values=et_values,
-        rewards=rewards,  # TODO: remove non-useful rewards and norm_stats
+        rewards=rewards,
         valid_mask=valid_mask,
         coords=coords,
         norm_stats=np.array(

@@ -1,8 +1,11 @@
+"""Small shared utilities: logging configuration and min-max normalisation."""
+
 import logging
 import sys
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from typing import Dict
+
 
 def get_logger(name: str = "cs8903", level: str = "INFO", log_file: str = None, stream: bool = True) -> logging.Logger:
     """

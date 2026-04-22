@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""Run baseline comparison against MaskablePPO V2 on Exp III.
+"""Run one or more baseline methods (random / greedy / genetic / ppo) on the
+test split and emit per-episode CSV + summary table CSV + box-plot.
 
-Methods: random / greedy / genetic / ppo.
-Output: per-episode CSV, summary-table CSV, box-plot PNG in an output dir.
+Use --w-tree/--w-crop/--w-built/--w-buf/--w-rip/--riparian-mask to match the
+reward config under which the PPO model was trained; otherwise Greedy and GA
+optimise against a different objective than PPO saw.
 
 Usage:
-    # Full run (all 4 methods, ~48 episodes each)
-    python src/eval_baselines.py --ppo-model models/gbdpkgiq/model.zip
+    # All methods, aligned reward
+    python src/eval_baselines.py --ppo-model models/<run_id>/model.zip \\
+        --w-crop 4 --w-buf 6 --w-rip 5 --riparian-mask
 
-    # Smoke test: 2 episodes, skip GA
-    python src/eval_baselines.py \\
-        --methods random greedy ppo \\
-        --n-episodes 2 \\
-        --ppo-model models/gbdpkgiq/model.zip
+    # Smoke test: skip GA, 2 episodes
+    python src/eval_baselines.py --methods random greedy ppo \\
+        --n-episodes 2 --ppo-model models/<run_id>/model.zip
 
     # GA only, tiny budget
     python src/eval_baselines.py --methods genetic --ga-pop 5 --ga-gens 3 --n-episodes 2
@@ -34,7 +35,7 @@ project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-# Disable torch simplex validation (same rationale as train_v2.py)
+# Matches train_v2.py (avoids false-positive simplex errors on large softmax)
 torch.distributions.Distribution.set_default_validate_args(False)
 
 from src.config import data_dir
@@ -50,7 +51,7 @@ from src.baselines.genetic_agent import GeneticAgent
 
 # ── PPO wrapper ────────────────────────────────────────────────────────
 class PPOAgent:
-    """Wraps a loaded MaskablePPO model to match the baseline act_fn interface."""
+    """Adapter: loaded MaskablePPO model presented as `act_fn(env) -> int`."""
 
     def __init__(self, model, deterministic: bool = True):
         self.model = model
@@ -163,7 +164,7 @@ def plot_box(all_records: list[dict], path: Path) -> None:
     ax.boxplot(data, tick_labels=methods, showmeans=True)
     ax.axhline(0, linestyle="--", color="grey", linewidth=0.8)
     ax.set_ylabel("Δ total_value")
-    ax.set_title("Baseline comparison on Exp III (spatial_scale=1, regen-ag)")
+    ax.set_title("Baseline comparison on Exp III")
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
@@ -186,12 +187,28 @@ def parse_args():
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--skip-plot", action="store_true")
 
-    # Env overrides (defaults match Exp III)
+    # Env overrides (defaults match Exp III / tier-1 training defaults)
     env_g = p.add_argument_group("Env (Exp III defaults)")
     env_g.add_argument("--n-augment", type=int, default=5)
     env_g.add_argument("--max-steps", type=int, default=500)
-    env_g.add_argument("--eco-variant", type=str, default="regen",
-                       choices=["standard", "regen"])
+    env_g.add_argument("--spatial-scale", type=float, default=1.0)
+    env_g.add_argument("--w-tree", type=float, default=1.0,
+                       help="Match training's --w-tree so Greedy/GA score under the same reward")
+    env_g.add_argument("--w-crop", type=float, default=3.0,
+                       help="Match training's --w-crop")
+    env_g.add_argument("--w-built", type=float, default=3.0,
+                       help="Match training's --w-built")
+    env_g.add_argument("--w-buf", type=float, default=5.0,
+                       help="Match training's --w-buf (final, post-anneal value)")
+    env_g.add_argument("--w-rip", type=float, default=0.0,
+                       help="Match training's --w-rip (riparian-trees bonus)")
+    env_g.add_argument("--riparian-mask", action="store_true",
+                       help="Match training's --riparian-mask. When set, Greedy and PPO "
+                            "both see a restricted action space (no crop/built at "
+                            "water-adjacent cells), which is the intended fair "
+                            "comparison for Phase C (§8.10.7).")
+    env_g.add_argument("--use-et", action="store_true",
+                       help="Use real ET values (must match training --use-et)")
 
     # GA
     ga_g = p.add_argument_group("GA hyperparameters")
@@ -221,7 +238,14 @@ def main():
     # Env
     env = make_eval_env(
         split="test_indices",
-        eco_variant=args.eco_variant,
+        use_et=args.use_et,
+        spatial_scale=args.spatial_scale,
+        w_tree=args.w_tree,
+        w_crop=args.w_crop,
+        w_built=args.w_built,
+        w_buf=args.w_buf,
+        w_rip=args.w_rip,
+        riparian_mask=args.riparian_mask,
         max_steps=args.max_steps,
         n_augment=args.n_augment,
     )

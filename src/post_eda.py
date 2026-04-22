@@ -1,3 +1,7 @@
+"""Post-download EDA utilities: MODIS ET ingest, Sentinel-2 land-cover
+handling, per-cell eco / ET aggregation, and the plotting helpers used by
+`eval_v2.py` / `eval_zoom_v2.py` (state heatmap, zoom comparison)."""
+
 import json
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -27,8 +31,10 @@ logger = get_logger(__name__)
 
 
 def fetch_modis_data(year, area_of_interest):
-    """Fetch, merge, and mask MODIS ET data for a given year and AOI.
-    Note: data is calculated with 8days compound interval and eventually become a yearly aggregation per 500*500m resolution
+    """Fetch MODIS MOD16A3GF yearly ET tiles (500 m resolution) intersecting
+    `area_of_interest`, merge them, and return the raster cropped to the AOI.
+
+    Returns: (masked_et, masked_et_transform, modis_profile, modis_crs).
     """
     logger.info(f"Fetching MODIS data for {year}...")
     catalog = pystac_client.Client.open(

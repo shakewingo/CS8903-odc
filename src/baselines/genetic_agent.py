@@ -1,16 +1,12 @@
-"""Genetic Algorithm baseline (Shen et al. 2025 §3.4.3 inspired).
+"""Genetic Algorithm baseline.
 
-Each chromosome is a fixed-length integer sequence of flat V2 action indices
-(Discrete(H*W*K*K)). Fitness = final total_value - initial total_value when
-the chromosome is replayed against a snapshot of the env positioned at the
-target test grid.
+Chromosome: fixed-length (= env.max_steps) integer sequence of flat action
+indices. Fitness: final `total_value − initial total_value` when the chromosome
+is replayed against a snapshot of the env positioned at the target grid.
 
-Invalid genes (masked-out at replay time) are treated as no-ops by the env,
-consistent with PPO's handling. During both evolution and final reporting,
-`max_consecutive_noops` is overridden to a large value so the chromosome is
-always evaluated over its full horizon — GA pre-commits an action sequence
-offline and shouldn't be punished for invalid genes the way an online policy
-that adapts to state would be.
+Invalid genes (masked-out at replay time) are no-ops; during evolution and
+replay, `max_consecutive_noops` is raised above the horizon so the chromosome
+is always evaluated over its full length.
 """
 from __future__ import annotations
 
@@ -45,9 +41,11 @@ class GeneticAgent:
 
     # ── Main solve loop ───────────────────────────────────────────────
     def solve(self, env, idx: int) -> Callable:
-        """Evolve the best chromosome for `env.samples[idx]`.
+        """Evolve a best-fitness chromosome for the sample at `env.samples[idx]`.
 
-        Returns an act_fn closure that `run_episode` can call each step.
+        Returns `act_fn(env) -> int` that replays chromosome gene
+        `chromosome[env.step_count]` each step. Leaves env at the initial
+        snapshot so the caller can run the replay episode directly.
         """
         horizon = env.max_steps
         high_noops = horizon + 1
@@ -57,7 +55,8 @@ class GeneticAgent:
         initial_snapshot = env.get_state_dict()
         initial_total = env.prev_total_value
 
-        # Init population: mask-aware seeding from the initial state
+        # Mask-aware seeding: each chromosome gene starts legal under the initial
+        # action mask, avoiding a pure-no-op starting population.
         init_mask_valid = np.flatnonzero(env.action_masks())
         pop = [
             self.rng.choice(init_mask_valid, size=horizon).astype(np.int64)
@@ -124,8 +123,7 @@ class GeneticAgent:
         return c1, c2
 
     def _mutate(self, chromosome: np.ndarray) -> None:
-        # Most mutations hit masked-invalid genes and become no-ops at replay —
-        # that's the intended exploration mechanism, not a bug.
+        """In-place mutation: flip each gene with prob `mutation_prob`."""
         mut_mask = self.rng.random(len(chromosome)) < self.mutation_prob
         n_mut = int(mut_mask.sum())
         if n_mut == 0:

@@ -2,3 +2,4 @@
 research/*
 *.ipynb_checkpoints
 src/ppo.py
+node_modules
