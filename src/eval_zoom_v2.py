@@ -15,7 +15,7 @@ Usage:
         "Greedy=greedy;Tier-1=ppo:ajhudfa1;Phase 4=ppo:7ybfz89t"
 
     # Manual region layout
-    python src/eval_zoom_v2.py --regions "9,4;24,6;23,17,4,6"
+    python src/eval_zoom_v2.py --riparian-mask --deterministic --regions "2,7,5,5;34,0,5,5;2,30,5,5"
 
     # Smoke test (truncate samples per split)
     python src/eval_zoom_v2.py --max-samples 1
@@ -45,9 +45,9 @@ from src.utils import get_logger
 # (label, method, spec). Method ∈ {"ppo", "greedy", "random", "genetic"}.
 # Spec is the wandb run id (PPO only); ignored/None for baselines.
 EXPERIMENTS = [
-    ("Exp I",   "ppo", "51ze5z4a"),
-    ("Exp II",  "ppo", "3vt32ln3"),
-    ("Exp III", "ppo", "gbdpkgiq"),
+    ("Exp I",   "ppo", "n2947wpo"),
+    ("Exp II",  "ppo", "umgje44z"),
+    ("Exp III", "ppo", "7ybfz89t"),
 ]
 
 # Distinct colours for up to 4 regions; matches matplotlib tab palette.
@@ -78,6 +78,11 @@ def parse_args():
              "'34,0,5,5;7,24,5,5;45,18,5,5'. Overrides random placement.",
     )
     p.add_argument("--deterministic", action="store_true")
+    p.add_argument("--riparian-mask", action="store_true",
+                   help="Apply the hard riparian action mask at eval. Must match "
+                        "the training setting of every PPO checkpoint listed in "
+                        "--experiments; otherwise policies see a different "
+                        "action space than they were trained under.")
     p.add_argument("--max-samples", type=int, default=None,
                    help="(Smoke test) limit inference to the first N indices per split")
     p.add_argument(
@@ -198,11 +203,11 @@ def _build_make_act_fn(method, spec, models_dir, deterministic, env_args, ga_kwa
 
 def run_experiment(label, method, spec, data, initial_obs,
                    models_dir, deterministic=False, max_samples=None,
-                   ga_kwargs=None, seed=0):
+                   ga_kwargs=None, seed=0, riparian_mask=False):
     """Run one experiment over train+test splits and return
     `(reconstructed_50x50_final_map, set_of_modified_cells)`."""
     print(f"\n=== {label} ({method}{':' + spec if spec else ''}) ===")
-    env_args = SimpleNamespace()
+    env_args = SimpleNamespace(riparian_mask=riparian_mask)
     make_act_fn = _build_make_act_fn(
         method, spec, models_dir, deterministic, env_args,
         ga_kwargs or {}, seed,
@@ -304,6 +309,7 @@ def main():
             max_samples=args.max_samples,
             ga_kwargs=ga_kwargs,
             seed=args.seed,
+            riparian_mask=args.riparian_mask,
         )
         finals_by_exp[label] = final
         diffs_by_exp[label] = diff_cells

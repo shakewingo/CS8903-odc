@@ -50,7 +50,7 @@ ECO_VALUES = {
     1:  554,          # Water (anchor)
     2:  238,          # Trees
     4:  1136,         # Flooded
-    5:  246 * 1.35,   # Crops (regen-ag uplift)
+    5:  246 * 1.35,   # Crops (regen-ag uplift) * 1.35
     7:  295,          # Built Area
     8:  0,            # Bare Ground
     9:  0,            # Snow/Ice
@@ -63,7 +63,7 @@ PROTECTED_CLASSES = frozenset({0, 1, 3, 4, 6, 9, 10})
 
 # Study-area centre (Lake Malawi sub-region) used as the AOI anchor for grid
 # building. Bounds are derived by the dataset builder from GRID_KWARGS.
-CENTER = (-13.934564, 34.542859)
+CENTER = (-13.934564, 34.542859) # (-9.805573, 33.835935) 
 N_CLASSES = max(LAND_COVER_LABELS.keys()) + 1  # 12 class IDs (0-11)
 GRID_KWARGS = {
     "year": 2024,

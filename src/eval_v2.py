@@ -36,7 +36,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from src.config import (
-    ECO_VALUES, ET_VALUES,
+    ECO_VALUES, ET_VALUES, LAND_COVER_COLORS, LAND_COVER_LABELS,
     N_CLASSES, N_PIXELS_PER_CELL, SEED, data_dir, log_dir,
 )
 from src.post_eda import plot_state_heatmap
@@ -216,6 +216,11 @@ def print_diff_table(initial_obs, final_obs_recst):
     return diffs
 
 
+def land_use_ratios(obs):
+    """Per-class global ratio across the map (obs is (H, W, N_CLASSES) fractions)."""
+    return obs.reshape(-1, obs.shape[-1]).mean(axis=0)
+
+
 def plot_comparison(initial_obs, final_obs_recst, diffs, value_vec, save_path):
     """Side-by-side before/after heatmap with changed cells highlighted."""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(50, 20))
@@ -231,6 +236,19 @@ def plot_comparison(initial_obs, final_obs_recst, diffs, value_vec, save_path):
                 linewidth=2, edgecolor="black", facecolor="none",
             )
             ax.add_patch(rect)
+
+    before = land_use_ratios(initial_obs)
+    after = land_use_ratios(final_obs_recst)
+    handles, labels = [], []
+    for cls in sorted(LAND_COVER_LABELS):
+        if before[cls] == 0 and after[cls] == 0:
+            continue
+        b, a = before[cls] * 100, after[cls] * 100
+        handles.append(patches.Patch(color=LAND_COVER_COLORS[cls]))
+        labels.append(f"{LAND_COVER_LABELS[cls]}: {b:.1f}% → {a:.1f}% ({a-b:+.1f}%)")
+    fig.legend(handles, labels, loc="center left", bbox_to_anchor=(1.0, 0.5),
+               fontsize=20, frameon=False, title="Land-use ratio", title_fontsize=22)
+    fig.subplots_adjust(right=0.85)
 
     plt.savefig(save_path, dpi=200, bbox_inches="tight")
     print(f"\nPlot saved to {save_path}")
