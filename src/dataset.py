@@ -7,7 +7,7 @@ Pipeline:
    eco + ET (stats over valid cells only).
 3. `split_dataset(...)` → non-overlapping 10×10 blocks, shuffled into
    train (70%) / test (30%) by TRAIN_RATIO.
-4. `save_dataset(...)` → compressed `.npz` archive consumed by train_v2 /
+4. `save_dataset(...)` → compressed `.npz` archive consumed by train /
    eval scripts.
 """
 

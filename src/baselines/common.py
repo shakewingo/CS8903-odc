@@ -1,9 +1,9 @@
 """Shared helpers for baseline methods (Random / Greedy / GA) running against
-LandUseEnvV2.
+LandUseEnv.
 
 Exports:
-- `make_eval_env(...)`  — build a configured LandUseEnvV2 and set the
-  `train_v2` globals (ECO_MOD, ET_MOD, logger) needed for reward computation.
+- `make_eval_env(...)`  — build a configured LandUseEnv and set the
+  `train` globals (ECO_MOD, ET_MOD, logger) needed for reward computation.
 - `reset_to_index(env, idx)`  — deterministically position the env at sample
   `idx` and re-derive all `prev_*` state from the new initial state.
 - `run_episode(act_fn, env, idx)`  — run one episode and return a metrics dict.
@@ -44,23 +44,23 @@ def make_eval_env(
     lambda_et: float = 1.0,
     log_name: str = "baselines",
 ):
-    """Build a LandUseEnvV2 and initialise the `train_v2` globals it reads.
+    """Build a LandUseEnv and initialise the `train` globals it reads.
 
     Side effects (required before any reward computation):
-    - Assigns `train_v2.ECO_MOD` / `ET_MOD` via `build_value_vecs`.
-    - Installs a dedicated file logger on `train_v2.logger`.
+    - Assigns `train.ECO_MOD` / `ET_MOD` via `build_value_vecs`.
+    - Installs a dedicated file logger on `train.logger`.
     """
-    import src.train_v2 as tv2
+    import src.train as train_mod
 
-    tv2.build_value_vecs(use_et=use_et, assign_globals=True)
-    tv2.logger = get_logger(
+    train_mod.build_value_vecs(use_et=use_et, assign_globals=True)
+    train_mod.logger = get_logger(
         log_name,
         log_file=str(Path(log_dir, f"{log_name}.log")),
         stream=False,
         level="WARNING",
     )
 
-    env = tv2.LandUseEnvV2(
+    env = train_mod.LandUseEnv(
         split=split,
         max_steps=max_steps,
         spatial_scale=spatial_scale,
@@ -144,12 +144,12 @@ def run_episode(
 
     # Final class fractions (modifiable mass only; order: trees, crops, built,
     # bare, rangeland). Sanity check for mosaic vs monoculture policies.
-    import src.train_v2 as tv2
+    import src.train as train_mod
     final_mass = float(env.state.sum())
     if final_mass > 1e-9:
         frac = env.state.sum(axis=(0, 1)) / final_mass
     else:
-        frac = np.zeros(tv2.N_MOD, dtype=np.float32)
+        frac = np.zeros(train_mod.N_MOD, dtype=np.float32)
 
     return {
         "episode_idx": idx,

@@ -1,6 +1,6 @@
 """Post-download EDA utilities: MODIS ET ingest, Sentinel-2 land-cover
 handling, per-cell eco / ET aggregation, and the plotting helpers used by
-`eval_v2.py` / `eval_zoom_v2.py` (state heatmap, zoom comparison)."""
+`eval.py` / `eval_zoom.py` (state heatmap, zoom comparison)."""
 
 import json
 import multiprocessing

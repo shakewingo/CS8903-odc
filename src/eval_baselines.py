@@ -35,7 +35,7 @@ project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-# Matches train_v2.py (avoids false-positive simplex errors on large softmax)
+# Matches train.py (avoids false-positive simplex errors on large softmax)
 torch.distributions.Distribution.set_default_validate_args(False)
 
 from src.config import data_dir
@@ -146,7 +146,7 @@ def write_summary_table(per_method: dict[str, dict], path: Path) -> None:
     print(f"Summary table CSV → {path}")
 
 
-def plot_box(all_records: list[dict], path: Path) -> None:
+def plot_box(all_records: list[dict], path: Path, title: str = "Baseline comparison on Exp III") -> None:
     try:
         import matplotlib.pyplot as plt
     except ImportError:
@@ -164,11 +164,101 @@ def plot_box(all_records: list[dict], path: Path) -> None:
     ax.boxplot(data, tick_labels=methods, showmeans=True)
     ax.axhline(0, linestyle="--", color="grey", linewidth=0.8)
     ax.set_ylabel("Δ total_value")
-    ax.set_title("Baseline comparison on Exp III")
+    ax.set_title(title)
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
     print(f"Box plot → {path}")
+
+
+def plot_line(records: list[dict], path: Path,
+              title: str = "Per-episode Δ total_value on effective grids") -> None:
+    """Line plot: x = effective-episode ordinal, y = Δ total_value, one line per method."""
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("matplotlib not available; skipping line plot")
+        return
+
+    by_method: dict[str, list[tuple[int, float]]] = {}
+    for r in records:
+        by_method.setdefault(r["method"], []).append(
+            (int(r["episode_idx"]), float(r["delta_total_value"]))
+        )
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    for method in sorted(by_method):
+        pairs = sorted(by_method[method])
+        xs = list(range(1, len(pairs) + 1))
+        ys = [p[1] for p in pairs]
+        ax.plot(xs, ys, marker="o", label=method, linewidth=1.2, markersize=4)
+    ax.axhline(0, linestyle="--", color="grey", linewidth=0.8)
+    ax.set_xlabel("Effective episode (sorted by grid index)")
+    ax.set_ylabel("Δ total_value")
+    ax.set_title(title)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    print(f"Line plot → {path}")
+
+
+# ── Effective-episode filtering / reprocessing ────────────────────────
+def filter_effective(records: list[dict], threshold: float = 1.0) -> list[dict]:
+    """Keep episodes where the starting grid is non-trivial (initial_total_value > threshold).
+    Trivial grids are dominated by protected classes and no method can move the score."""
+    return [r for r in records if float(r["initial_total_value"]) > threshold]
+
+
+def write_effective_artifacts(records: list[dict], out_dir: Path,
+                              threshold: float = 1.0) -> None:
+    effective = filter_effective(records, threshold)
+    if not effective:
+        print(f"No episodes with initial_total_value > {threshold}; skipping effective artifacts")
+        return
+
+    per_method: dict[str, dict] = {}
+    by_method: dict[str, list[dict]] = {}
+    for r in effective:
+        by_method.setdefault(r["method"], []).append(r)
+    for method, rs in by_method.items():
+        per_method[method] = aggregate(rs)
+
+    write_per_episode_csv(effective, out_dir / "per_episode_effective.csv")
+    write_summary_table(per_method, out_dir / "table_effective.csv")
+    plot_box(effective, out_dir / "boxplot_effective.png",
+             title=f"Exp III (effective grids, initial_total_value > {threshold})")
+    plot_line(effective, out_dir / "lineplot.png")
+    print(f"Effective artifacts → {out_dir} "
+          f"({len(effective)} rows across {len(per_method)} methods)")
+
+
+def _coerce_row(row: dict) -> dict:
+    """Convert a CSV DictReader row back to typed fields used downstream."""
+    STR_KEYS = {"method", "termination_reason"}
+    INT_KEYS = {"episode_idx", "steps"}
+    out: dict = {}
+    for k, v in row.items():
+        if k in STR_KEYS:
+            out[k] = v
+        elif k == "success":
+            out[k] = str(v).lower() in ("true", "1")
+        elif k in INT_KEYS:
+            out[k] = int(v) if v not in ("", None) else 0
+        else:
+            out[k] = float(v) if v not in ("", None) else 0.0
+    return out
+
+
+def reprocess_from_csv(input_dir: Path, threshold: float = 1.0) -> None:
+    """Load per_episode.csv from `input_dir` and re-emit effective-only artifacts."""
+    src = Path(input_dir) / "per_episode.csv"
+    if not src.exists():
+        raise SystemExit(f"per_episode.csv not found at {src}")
+    with open(src, newline="") as f:
+        records = [_coerce_row(r) for r in csv.DictReader(f)]
+    print(f"Loaded {len(records)} records from {src}")
+    write_effective_artifacts(records, Path(input_dir), threshold)
 
 
 # ── CLI ───────────────────────────────────────────────────────────────
@@ -186,6 +276,16 @@ def parse_args():
                    help="Output directory (default: data/processed/baselines/<timestamp>).")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--skip-plot", action="store_true")
+    p.add_argument("--reprocess", type=str, default=None,
+                   help="Path to an existing baseline output dir. When set, "
+                        "skips episode rollouts and re-emits effective-only "
+                        "artifacts (per_episode_effective.csv, table_effective.csv, "
+                        "boxplot_effective.png, lineplot.png) from per_episode.csv.")
+    p.add_argument("--feasibility-threshold", type=float, default=1.0,
+                   help="initial_total_value strictly-greater-than threshold for "
+                        "an episode to count as 'effective'. Trivial grids covered "
+                        "by protected classes have initial_total_value ≈ 0 and no "
+                        "method can move the score.")
 
     # Env overrides (defaults match Exp III / tier-1 training defaults)
     env_g = p.add_argument_group("Env (Exp III defaults)")
@@ -225,6 +325,11 @@ def parse_args():
 
 def main():
     args = parse_args()
+
+    # Reprocess-only shortcut: skip rollouts, re-emit effective artifacts.
+    if args.reprocess:
+        reprocess_from_csv(Path(args.reprocess), threshold=args.feasibility_threshold)
+        return
 
     # Output directory
     if args.output_dir:
@@ -289,6 +394,8 @@ def main():
     write_summary_table(per_method, out_dir / "table.csv")
     if not args.skip_plot:
         plot_box(all_records, out_dir / "boxplot.png")
+        write_effective_artifacts(all_records, out_dir,
+                                  threshold=args.feasibility_threshold)
 
     print(f"\nDone. Artifacts in {out_dir}")
 
