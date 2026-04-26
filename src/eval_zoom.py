@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""
-Generate the zoom-in comparison figure for the flagship experiments.
+"""Generate a zoom-in comparison figure across multiple agents.
 
-Loads the trained MaskablePPO checkpoints, runs inference on the full 50×50
-grid, reconstructs each experiment's final land-use allocation, and renders
-a single figure with:
-
-  1. An overview of the original allocation with coloured locator boxes.
-  2. A (4 × n_regions) zoom grid: Original / Exp I / Exp II / Exp III rows,
-     one column per region.
-
-Regions are chosen randomly (seeded); the intent is to let the author check
-the layout before committing to curated coordinates.
+Runs each configured experiment (PPO checkpoint or baseline method) over the
+full 50×50 grid, reconstructs the final land-use allocation, and renders a
+single figure with a map overview plus an (N_experiments+1) × n_regions zoom
+grid (row 1 = original).
 
 Usage:
-    python src/eval_zoom.py                       # random regions, full eval
-    python src/eval_zoom.py --region-size 5       # custom zoom size
-    python src/eval_zoom.py --seed 0              # reproducible random pick
-    python src/eval_zoom.py --max-samples 1       # smoke test
-    python src/eval_zoom.py --regions "9,4;24,6;23,17,4,6"  # manual regions
+    # Default: 3 PPO checkpoints from EXPERIMENTS constant
+    python src/eval_zoom.py
+
+    # Mixed methods via CLI override
+    python src/eval_zoom.py --experiments \\
+        "Greedy=greedy;Tier-1=ppo:ajhudfa1;Phase 4=ppo:7ybfz89t"
+
+    # Manual region layout
+    python src/eval_zoom.py --riparian-mask --deterministic --regions "2,7,5,5;34,0,5,5;2,30,5,5"
+
+    # Smoke test (truncate samples per split)
+    python src/eval_zoom.py --max-samples 1
 """
 import argparse
 import sys
@@ -42,11 +42,12 @@ from src.utils import get_logger
 
 
 # ── Experiment registry ───────────────────────────────────────────────
-# (label, wandb run id / model dir, spatial_scale)
+# (label, method, spec). Method ∈ {"ppo", "greedy", "random", "genetic"}.
+# Spec is the wandb run id (PPO only); ignored/None for baselines.
 EXPERIMENTS = [
-    ("Exp I",   "6f0ta58i", 0.0),
-    ("Exp II",  "2sk0pnp3", 1.0),
-    ("Exp III", "pzy2mxod", 1.0),
+    ("Exp I",   "ppo", "n2947wpo"),
+    ("Exp II",  "ppo", "umgje44z"),
+    ("Exp III", "ppo", "7ybfz89t"),
 ]
 
 # Distinct colours for up to 4 regions; matches matplotlib tab palette.
@@ -77,9 +78,59 @@ def parse_args():
              "'34,0,5,5;7,24,5,5;45,18,5,5'. Overrides random placement.",
     )
     p.add_argument("--deterministic", action="store_true")
+    p.add_argument("--riparian-mask", action="store_true",
+                   help="Apply the hard riparian action mask at eval. Must match "
+                        "the training setting of every PPO checkpoint listed in "
+                        "--experiments; otherwise policies see a different "
+                        "action space than they were trained under.")
     p.add_argument("--max-samples", type=int, default=None,
                    help="(Smoke test) limit inference to the first N indices per split")
+    p.add_argument(
+        "--experiments", type=str, default=None,
+        help="Override the default experiment list. Semicolon-separated "
+             "entries of the form 'Label=method' or 'Label=method:spec'. "
+             "method ∈ {ppo, greedy, random, genetic}; spec is the wandb "
+             "run_id (PPO only). Example: "
+             "'Greedy=greedy;Tier-1=ppo:ajhudfa1;Phase 4=ppo:7ybfz89t'",
+    )
+    # GA knobs (kept modest — per-episode solve is expensive; 25 eps × pop·gens
+    # env rollouts each).
+    ga_g = p.add_argument_group("GA (only when an experiment uses method=genetic)")
+    ga_g.add_argument("--ga-pop", type=int, default=20)
+    ga_g.add_argument("--ga-gens", type=int, default=20)
+    ga_g.add_argument("--ga-tournament-k", type=int, default=3)
+    ga_g.add_argument("--ga-crossover-prob", type=float, default=0.8)
+    ga_g.add_argument("--ga-mutation-prob", type=float, default=0.02)
+    ga_g.add_argument("--ga-n-elite", type=int, default=2)
     return p.parse_args()
+
+
+def parse_experiments(spec: str):
+    """Parse '--experiments' override. Returns list of (label, method, spec)."""
+    out = []
+    for entry in spec.split(";"):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if "=" not in entry:
+            raise ValueError(f"Experiment '{entry}' missing '='")
+        label, rhs = entry.split("=", 1)
+        label = label.strip()
+        if ":" in rhs:
+            method, run_spec = rhs.split(":", 1)
+            method = method.strip()
+            run_spec = run_spec.strip() or None
+        else:
+            method = rhs.strip()
+            run_spec = None
+        if method not in ("ppo", "greedy", "random", "genetic"):
+            raise ValueError(f"Unknown method '{method}' in experiment '{entry}'")
+        if method == "ppo" and not run_spec:
+            raise ValueError(f"PPO experiment '{entry}' requires ':<run_id>'")
+        out.append((label, method, run_spec))
+    if not out:
+        raise ValueError("--experiments must contain at least one entry")
+    return out
 
 
 def parse_regions(spec, default_size):
@@ -114,36 +165,62 @@ def parse_regions(spec, default_size):
     return regions
 
 
-def run_experiment(label, run_id, spatial_scale, data, initial_obs,
-                   models_dir, deterministic=False, max_samples=None):
-    """Load one checkpoint, run inference over both splits, and return
-    ``(reconstructed_final_map, set_of_modified_cells)``.
+def _build_make_act_fn(method, spec, models_dir, deterministic, env_args, ga_kwargs, seed):
+    """Return an `(env, ep) -> act_fn` factory for the requested method.
 
-    All env / inference / reconstruction plumbing is reused from
-    :mod:`src.eval` — this function is just the per-experiment glue.
+    `spec` is the PPO run_id (under --models-dir) when method="ppo", else None.
+    GA agents receive `ga_kwargs`; Random uses `seed`.
     """
-    model_path = Path(models_dir, run_id, "model.zip")
-    print(f"\n=== {label} ({run_id}) ===")
-    print(f"  loading {model_path}")
+    if method == "ppo":
+        model_path = Path(models_dir, spec, "model.zip")
+        print(f"  loading {model_path}")
+        dummy_env = make_env(env_args, "test_indices")
+        model = MaskablePPO.load(str(model_path), env=dummy_env)
 
-    # The env kwargs here affect reward computation but not the agent's
-    # action choices, so only spatial_scale matters for consistency with
-    # training; everything else falls back to make_env's defaults.
-    env_args = SimpleNamespace(spatial_scale=spatial_scale)
-    dummy_env = make_env(env_args, "test_indices")
-    model = MaskablePPO.load(str(model_path), env=dummy_env)
+        def ppo_act(env):
+            action, _ = model.predict(env.state,
+                                      action_masks=env.action_masks(),
+                                      deterministic=deterministic)
+            return int(action)
+        return lambda env, ep: ppo_act
+    elif method == "greedy":
+        from src.baselines.greedy_agent import GreedyAgent
+        agent = GreedyAgent()
+        return lambda env, ep: agent
+    elif method == "random":
+        from src.baselines.random_agent import RandomAgent
+        agent = RandomAgent(seed=seed)
+        return lambda env, ep: agent
+    elif method == "genetic":
+        from src.baselines.genetic_agent import GeneticAgent
+        agent = GeneticAgent(seed=seed, **ga_kwargs)
+        print(f"  GeneticAgent pop={ga_kwargs['pop_size']}, "
+              f"gens={ga_kwargs['generations']} — slow (~1 solve per episode)")
+        return lambda env, ep: agent.solve(env, ep)
+    else:
+        raise ValueError(f"unknown method: {method}")
+
+
+def run_experiment(label, method, spec, data, initial_obs,
+                   models_dir, deterministic=False, max_samples=None,
+                   ga_kwargs=None, seed=0, riparian_mask=False):
+    """Run one experiment over train+test splits and return
+    `(reconstructed_50x50_final_map, set_of_modified_cells)`."""
+    print(f"\n=== {label} ({method}{':' + spec if spec else ''}) ===")
+    env_args = SimpleNamespace(riparian_mask=riparian_mask)
+    make_act_fn = _build_make_act_fn(
+        method, spec, models_dir, deterministic, env_args,
+        ga_kwargs or {}, seed,
+    )
 
     combined = {}
     for split in ("test_indices", "train_indices"):
         env = make_env(env_args, split)
         data_view = data
         if max_samples is not None:
-            # Truncate just this split; leave the others untouched.
             data_view = {k: data[k] for k in data.files}
             data_view[split] = data[split][:max_samples]
-        combined.update(
-            run_inference(model, env, data_view, split, deterministic)
-        )
+        combined.update(run_inference(make_act_fn, env, data_view, split))
 
     _, final = reconstruct_map(data, combined)
     diff_cells = compute_diff_cells(initial_obs, final)
@@ -209,15 +286,30 @@ def main():
     initial_obs = data["pixel_counts"].astype(np.float32) / N_PIXELS_PER_CELL
     n_rows, n_cols, _ = initial_obs.shape
 
+    # Resolve experiment list: CLI override takes precedence over default.
+    experiments = parse_experiments(args.experiments) if args.experiments else EXPERIMENTS
+
+    ga_kwargs = dict(
+        pop_size=args.ga_pop,
+        generations=args.ga_gens,
+        tournament_k=args.ga_tournament_k,
+        crossover_prob=args.ga_crossover_prob,
+        mutation_prob=args.ga_mutation_prob,
+        n_elite=args.ga_n_elite,
+    )
+
     # Run inference for each experiment
     finals_by_exp = {}
     diffs_by_exp = {}
-    for label, run_id, spatial_scale in EXPERIMENTS:
+    for label, method, spec in experiments:
         final, diff_cells = run_experiment(
-            label, run_id, spatial_scale, data, initial_obs,
+            label, method, spec, data, initial_obs,
             models_dir=args.models_dir,
             deterministic=args.deterministic,
             max_samples=args.max_samples,
+            ga_kwargs=ga_kwargs,
+            seed=args.seed,
+            riparian_mask=args.riparian_mask,
         )
         finals_by_exp[label] = final
         diffs_by_exp[label] = diff_cells
