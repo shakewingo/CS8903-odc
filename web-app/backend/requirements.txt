@@ -1,0 +1,19 @@
+# CPU-only PyTorch (saves ~1.5GB image size + ~500MB RAM vs full torch)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.7.0+cpu
+
+fastapi>=0.115
+uvicorn[standard]>=0.34
+numpy>=1.26
+rasterio>=1.4
+pyproj>=3.7
+shapely>=2.0
+stable-baselines3>=2.4
+sb3-contrib>=2.4
+scipy>=1.14
+gymnasium>=1.0
+scikit-learn>=1.5
+pandas>=2.2
+matplotlib>=3.9
+planetary-computer>=1.0
+pystac-client>=0.8
