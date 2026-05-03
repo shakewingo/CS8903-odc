@@ -182,11 +182,35 @@ def run_inference(make_act_fn, env, data, split_key):
 
 
 def reconstruct_map(data, final_obs):
-    """Overlay agent outputs onto the full map (fraction space)."""
+    """Overlay agent outputs onto the full map (fraction space).
+
+    Each agent obs (shape size×size×N_MOD) gets pasted into the modifiable
+    slices of the full map at its window origin; the protected slices stay
+    as the initial copy. The agent enforces conservation per-cell via
+    `_apply_action`, so the modifiable mass at every (r+rr, c+cc) cell
+    must equal what was there at the start of that episode. We assert it
+    here — a violation means the env was reset against a *different*
+    pixel_counts than `data["pixel_counts"]` (e.g. the static rl_dataset
+    leaking through when a per-request dataset was intended).
+    """
     initial_obs = data["pixel_counts"].astype(np.float32) / N_PIXELS_PER_CELL
     final_obs_recst = initial_obs.copy()
 
     for (r, c), obs in final_obs.items():
+        init_block_mod = initial_obs[r:r+10, c:c+10][..., MODIFIABLE_CLASSES]
+        init_sum = init_block_mod.sum(axis=2)   # (10, 10)
+        final_sum = obs.sum(axis=2)             # (10, 10)
+        bad = ~np.isclose(init_sum, final_sum, atol=1e-3)
+        if bad.any():
+            n_bad = int(bad.sum())
+            max_diff = float(np.max(np.abs(final_sum - init_sum)))
+            raise AssertionError(
+                f"reconstruct_map: env state for sample at ({r},{c}) "
+                f"violates per-cell modifiable-mass conservation "
+                f"({n_bad}/100 cells, max |Δsum|={max_diff:.4f}). This "
+                f"usually means env.samples was not derived from the "
+                f"same data['pixel_counts'] passed here."
+            )
         for k, cls in enumerate(MODIFIABLE_CLASSES):
             final_obs_recst[r:r+10, c:c+10, cls] = obs[:, :, k]
 

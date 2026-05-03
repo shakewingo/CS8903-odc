@@ -16,11 +16,12 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 import src.train as train_module
-from src.config import ECO_VALUES
+from src.config import ECO_VALUES, SEED
 from src.eval import (
     build_value_vecs, make_env, run_inference,
     reconstruct_map, compute_diff_cells,
 )
+from src.train import augment_data
 from src.utils import get_logger
 from backend.formatting import build_results_json
 
@@ -139,6 +140,16 @@ def _run_cached(lat_r: float, lng_r: float, experiment: str):
     combined = {}
     for split in ("test_indices", "train_indices"):
         env = make_env(env_args, split)
+        # make_env already called env.reset(), which built env.samples from
+        # the static rl_dataset.npz that LandUseEnv loaded at __init__. For
+        # the web app's per-request dataset, override env.samples so the
+        # agent actually sees the user's clicked area instead of the
+        # training-time area. (env.data is also re-pointed for completeness
+        # in case anything downstream re-augments.)
+        env.data = dataset
+        env.samples = augment_data(
+            dataset, size=env.size, seed=SEED, split=split, n_augment=0,
+        )
         combined.update(
             run_inference(make_act_fn, env, dataset, split)
         )

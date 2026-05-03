@@ -21,6 +21,13 @@ LAND_COVERS.forEach((lc) => { COLOR_MAP[lc.id] = lc.color; });
 export const DEFAULT_ESV_MAP: Record<number, number> = {};
 LAND_COVERS.forEach((lc) => { DEFAULT_ESV_MAP[lc.id] = lc.defaultEsv; });
 
+const LABEL_MAP: Record<number, string> = {};
+LAND_COVERS.forEach((lc) => { LABEL_MAP[lc.id] = lc.label; });
+
+// Mirror src/config.PROTECTED_CLASSES — these classes are never modified by
+// the agent, so the optimised allocation panel will always show them as-is.
+const PROTECTED_CLASS_IDS = new Set([0, 1, 3, 4, 6, 9, 10]);
+
 export type CellFractions = Record<string, number>;
 
 function HeatmapCell({ fractions, esvValues }: { fractions: CellFractions; esvValues: Record<number, number> }) {
@@ -33,8 +40,18 @@ function HeatmapCell({ fractions, esvValues }: { fractions: CellFractions; esvVa
     .filter(([, v]) => v > 0.01)
     .sort(([, a], [, b]) => b - a);
 
+  // Tag the cell as "protected" when its dominant class is one the agent
+  // can't touch (water, flooded, snow/ice, clouds/nodata) — clarifies why
+  // those cells never appear in the optimised side.
+  const dominantId = sortedFracs.length > 0 ? Number(sortedFracs[0][0]) : null;
+  const isProtected = dominantId !== null && PROTECTED_CLASS_IDS.has(dominantId);
+  const dominantLabel = dominantId !== null ? (LABEL_MAP[dominantId] ?? `Class ${dominantId}`) : '';
+  const tip = isProtected
+    ? `${dominantLabel} — protected (agent does not modify)\nESV: $${totalEsv.toFixed(0)}/ha/yr`
+    : `ESV: $${totalEsv.toFixed(0)}/ha/yr`;
+
   return (
-    <div className="heatmap-cell" style={{ backgroundColor: bgColor }} title={`ESV: $${totalEsv.toFixed(0)}/ha/yr`}>
+    <div className="heatmap-cell" style={{ backgroundColor: bgColor }} title={tip}>
       <div className="fraction-bar">
         {sortedFracs.map(([id, frac]) => (
           <div key={id} style={{ width: `${frac * 100}%`, backgroundColor: COLOR_MAP[Number(id)] || '#ccc' }} />
