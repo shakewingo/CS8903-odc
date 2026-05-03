@@ -82,19 +82,18 @@ def obs_to_fractions_grid(obs):
 def compute_esv_changes(initial_obs, final_obs, changed_cells, esv_map):
     """Compute per-cell ESV deltas and dominant from→to land-cover types.
 
-    Mirrors the ESV change block in ``scripts/export_web_data.py``.
-
-    Parameters
-    ----------
-    initial_obs, final_obs : ndarray (n_rows, n_cols, N_CLASSES)
-    changed_cells          : set of (row, col) tuples
-    esv_map                : dict {class_id: USD/ha/yr}
-
     Returns
     -------
-    list[dict]  — sorted descending by ``esvDelta``
+    (rankable_changes, total_delta)
+        ``rankable_changes`` — list[dict] sorted desc by ``esvDelta``, only
+        cells where some class crossed ``DELTA_THRESHOLD`` in both directions
+        (so from/to are well defined). Used for the rankings table.
+        ``total_delta`` — sum of per-cell ESV deltas across **all**
+        ``changed_cells`` (including noise-only rows that get filtered out
+        of the rankings). Used for the summary.totalEsvGain stat.
     """
-    changes = []
+    rankable = []
+    total_delta = 0.0
     for r, c in changed_cells:
         before_esv = sum(
             float(initial_obs[r, c, cls_id]) * esv_map.get(cls_id, 0)
@@ -104,10 +103,13 @@ def compute_esv_changes(initial_obs, final_obs, changed_cells, esv_map):
             float(final_obs[r, c, cls_id]) * esv_map.get(cls_id, 0)
             for cls_id in ALL_CLASS_IDS if cls_id < final_obs.shape[2]
         )
+        cell_delta = after_esv - before_esv
+        total_delta += cell_delta
 
-        # Dominant decrease / increase class
-        max_dec_cls, max_dec = 0, 0.0
-        max_inc_cls, max_inc = 0, 0.0
+        # Dominant decrease / increase class. None when no class crossed
+        # DELTA_THRESHOLD — the cell is just numerical-noise diff.
+        max_dec_cls, max_dec = None, 0.0
+        max_inc_cls, max_inc = None, 0.0
         for cls_id in ALL_CLASS_IDS:
             if cls_id >= initial_obs.shape[2]:
                 continue
@@ -117,15 +119,20 @@ def compute_esv_changes(initial_obs, final_obs, changed_cells, esv_map):
             if delta > DELTA_THRESHOLD and delta > max_inc:
                 max_inc, max_inc_cls = delta, cls_id
 
-        changes.append({
+        # Skip noise-only cells from the rankings (they still count toward
+        # total_delta, just no clear from→to to display).
+        if max_dec_cls is None or max_inc_cls is None:
+            continue
+
+        rankable.append({
             "row": r, "col": c,
             "fromType": max_dec_cls,
             "toType": max_inc_cls,
-            "esvDelta": round(after_esv - before_esv, 1),
+            "esvDelta": round(cell_delta, 1),
         })
 
-    changes.sort(key=lambda x: x["esvDelta"], reverse=True)
-    return changes
+    rankable.sort(key=lambda x: x["esvDelta"], reverse=True)
+    return rankable, round(total_delta, 1)
 
 
 def build_results_json(experiment, initial_obs, final_obs, changed_cells, esv_map):
@@ -141,7 +148,9 @@ def build_results_json(experiment, initial_obs, final_obs, changed_cells, esv_ma
     """
     before_grid = obs_to_fractions_grid(initial_obs)
     after_grid = obs_to_fractions_grid(final_obs)
-    esv_changes = compute_esv_changes(initial_obs, final_obs, changed_cells, esv_map)
+    esv_changes, total_esv_gain = compute_esv_changes(
+        initial_obs, final_obs, changed_cells, esv_map,
+    )
 
     n_cells = initial_obs.shape[0] * initial_obs.shape[1]
     return {
@@ -152,7 +161,7 @@ def build_results_json(experiment, initial_obs, final_obs, changed_cells, esv_ma
         "esvChanges": esv_changes,
         "summary": {
             "cellsChanged": len(changed_cells),
-            "totalEsvGain": round(sum(x["esvDelta"] for x in esv_changes), 1),
+            "totalEsvGain": total_esv_gain,
             "maxCellGain": round(max((x["esvDelta"] for x in esv_changes), default=0), 1),
             "pctAreaModified": round(len(changed_cells) / n_cells * 100, 1),
         },

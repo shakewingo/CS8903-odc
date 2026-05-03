@@ -70,8 +70,9 @@ export default function DashboardSection() {
     });
   }, []);
 
-  // Fetch grid from backend when study area changes
-  const fetchGrid = useCallback(async (lat: number, lng: number) => {
+  // Fetch grid from backend when study area changes.
+  // Returns true on success so the caller can skip the chained inference on failure.
+  const fetchGrid = useCallback(async (lat: number, lng: number): Promise<boolean> => {
     gridAbortRef.current?.abort();
     const controller = new AbortController();
     gridAbortRef.current = controller;
@@ -94,9 +95,11 @@ export default function DashboardSection() {
       }
       const data = await res.json();
       setGridData(data);
+      return true;
     } catch (e: unknown) {
-      if (e instanceof Error && e.name === 'AbortError') return;
+      if (e instanceof Error && e.name === 'AbortError') return false;
       setError(e instanceof Error ? e.message : 'Grid generation failed');
+      return false;
     } finally {
       setGridLoading(false);
     }
@@ -109,6 +112,9 @@ export default function DashboardSection() {
     inferAbortRef.current = controller;
 
     setInferLoading(true);
+    // Clear any stale error from a previous failed attempt — this fetch is the
+    // authoritative new state for the loading panel.
+    setError(null);
 
     try {
       const res = await fetch(`${API_URL}/api/infer`, {
@@ -134,8 +140,8 @@ export default function DashboardSection() {
   // When study area changes, fetch new grid + inference for current experiment
   useEffect(() => {
     if (!studyArea) return;
-    fetchGrid(studyArea.lat, studyArea.lng).then(() => {
-      fetchInference(studyArea.lat, studyArea.lng, selectedExp);
+    fetchGrid(studyArea.lat, studyArea.lng).then((ok) => {
+      if (ok) fetchInference(studyArea.lat, studyArea.lng, selectedExp);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studyArea]);
@@ -188,7 +194,9 @@ export default function DashboardSection() {
       {isLoading && (
         <div className="flex items-center justify-center gap-2 py-3 bg-bg-dark-card border-b border-border-dark text-sm text-text-on-dark-muted">
           <Loader2 size={16} className="animate-spin" />
-          {gridLoading ? 'Generating grid from satellite data...' : 'Running model inference...'}
+          {gridLoading
+            ? 'Generating grid from satellite data… (~5–15s)'
+            : 'Running model inference… (~30–60s on first run per experiment)'}
         </div>
       )}
       {error && (

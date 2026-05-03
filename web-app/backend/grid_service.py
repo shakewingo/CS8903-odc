@@ -15,6 +15,7 @@ from src.config import (
 )
 from src.dataset import build_grid, normalize_and_compute_rewards, split_dataset
 from src.utils import get_logger
+from backend.formatting import pixel_counts_to_grid_json
 
 logger = get_logger("grid_service", level="INFO")
 
@@ -79,28 +80,10 @@ def _generate_grid(lat_r: float, lng_r: float, year: int, sample_rate: float,
     rewards, norm_stats = normalize_and_compute_rewards(eco_values, et_values, valid_mask)
     train_indices, test_indices = split_dataset(valid_mask, n_rows=n_rows, n_cols=n_cols)
 
-    # Build JSON grid
-    grid_json = []
-    for r in range(n_rows):
-        row_data = []
-        for c in range(n_cols):
-            counts = pixel_counts[r, c]
-            total = counts.sum()
-            if total == 0:
-                total = 1
-            fractions = {}
-            for idx, cls_id in enumerate(ALL_CLASS_IDS):
-                if idx < len(counts):
-                    frac = float(counts[idx]) / float(total)
-                    if frac > 0.001:
-                        fractions[str(cls_id)] = round(frac, 4)
-            row_data.append({
-                "f": fractions,
-                "e": round(float(eco_values[r, c]), 1),
-                "lat": round(float(coords[r, c, 0]), 6),
-                "lng": round(float(coords[r, c, 1]), 6),
-            })
-        grid_json.append(row_data)
+    # Build JSON grid using the shared helper (indexes counts by class ID,
+    # not positional — see commit / web_app_dev.md note about the bug fixed
+    # here). Shape per cell: {"f": {cls: frac}, "e": esv, "lat", "lng"}.
+    grid_json = pixel_counts_to_grid_json(pixel_counts, eco_values, coords)
 
     # Store numpy arrays for inference
     dataset = {

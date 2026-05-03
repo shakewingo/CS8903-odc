@@ -9,8 +9,12 @@ const LC_META: Record<number, { label: string; color: string }> = {
   5: { label: 'Crops', color: '#e49635' },
   7: { label: 'Built Area', color: '#c4281b' },
   8: { label: 'Bare Ground', color: '#a59b8f' },
+  9: { label: 'Snow/Ice', color: '#cfd8dc' },
+  10: { label: 'No Data', color: '#777777' },
   11: { label: 'Rangeland', color: '#e3e2c3' },
 };
+
+const UNKNOWN_LC = { label: '—', color: 'transparent' };
 
 interface Change {
   row: number;
@@ -47,28 +51,32 @@ export default function RankingsTable({ changes }: RankingsTableProps) {
             </tr>
           </thead>
           <tbody>
-            {changes.slice(0, 15).map((change, i) => (
-              <tr key={i}>
-                <td className="text-text-on-dark-muted font-mono text-xs">#{i + 1}</td>
-                <td className="text-text-on-dark font-mono text-xs">({change.row}, {change.col})</td>
-                <td>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: LC_META[change.fromType]?.color }} />
-                    <span className="text-text-on-dark text-xs">{LC_META[change.fromType]?.label}</span>
-                  </div>
-                </td>
-                <td className="text-text-on-dark-muted"><ArrowRight size={12} /></td>
-                <td>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: LC_META[change.toType]?.color }} />
-                    <span className="text-text-on-dark text-xs">{LC_META[change.toType]?.label}</span>
-                  </div>
-                </td>
-                <td className="text-right">
-                  <span className="text-accent-green-light font-semibold text-xs font-mono">+${change.esvDelta.toFixed(1)}</span>
-                </td>
-              </tr>
-            ))}
+            {changes.slice(0, 15).map((change, i) => {
+              const from = LC_META[change.fromType] ?? UNKNOWN_LC;
+              const to = LC_META[change.toType] ?? UNKNOWN_LC;
+              return (
+                <tr key={i}>
+                  <td className="text-text-on-dark-muted font-mono text-xs">#{i + 1}</td>
+                  <td className="text-text-on-dark font-mono text-xs">({change.row}, {change.col})</td>
+                  <td>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: from.color }} />
+                      <span className="text-text-on-dark text-xs">{from.label}</span>
+                    </div>
+                  </td>
+                  <td className="text-text-on-dark-muted"><ArrowRight size={12} /></td>
+                  <td>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: to.color }} />
+                      <span className="text-text-on-dark text-xs">{to.label}</span>
+                    </div>
+                  </td>
+                  <td className="text-right">
+                    <span className="text-accent-green-light font-semibold text-xs font-mono">+${change.esvDelta.toFixed(1)}</span>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

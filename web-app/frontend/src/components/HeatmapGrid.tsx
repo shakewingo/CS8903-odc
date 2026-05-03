@@ -10,6 +10,8 @@ export const LAND_COVERS = [
   { id: 5, label: 'Crops', color: '#e49635', defaultEsv: 246, ref: 'Costanza 2014 ratio 0.44 x anchor. Default is non-regenerative. +35% suggested for regenerative scenario.' },
   { id: 7, label: 'Built Area', color: '#c4281b', defaultEsv: 295, ref: 'Costanza 2014 ratio 0.53 x anchor (Urban)' },
   { id: 8, label: 'Bare Ground', color: '#a59b8f', defaultEsv: 0, ref: 'Desert — negligible ecosystem value' },
+  { id: 9, label: 'Snow/Ice', color: '#cfd8dc', defaultEsv: 0, ref: 'Sentinel-2 class 9 — no ESV assigned' },
+  { id: 10, label: 'No Data', color: '#777777', defaultEsv: 0, ref: 'Sentinel-2 class 10 — clouds / nodata pixels' },
   { id: 11, label: 'Rangeland', color: '#e3e2c3', defaultEsv: 184, ref: 'Costanza 2014 ratio 0.33 x anchor (Grass/Rangelands)' },
 ];
 
