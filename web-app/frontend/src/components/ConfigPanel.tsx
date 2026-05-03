@@ -5,17 +5,17 @@ import { Info, FlaskConical, Lock } from 'lucide-react';
 const EXPERIMENTS_CONFIG: Record<string, { title: string; wandb: string; config: Record<string, string | number | boolean> }> = {
   exp1: {
     title: 'Pure Eco-Value',
-    wandb: '6f0ta58i',
+    wandb: 'n2947wpo',
     config: { reward_scale: 1, spatial_scale: 0, w_tree: '—', w_crop: '—', w_built: '—', w_buf: '—', et_dcs_tolerance: 1, regen_crop: false, learning_rate: 3e-4, total_timesteps: 500_000, max_steps: 500, n_augment: 5 },
   },
   exp2: {
     title: 'Eco-Value + Spatial',
-    wandb: '2sk0pnp3',
+    wandb: 'umgje44z',
     config: { reward_scale: 1, spatial_scale: 1.0, w_tree: 1.0, w_crop: 3.0, w_built: 3.0, w_buf: 5.0, et_dcs_tolerance: 1, regen_crop: false, learning_rate: 1e-4, total_timesteps: 500_000, max_steps: 500, n_augment: 5 },
   },
   exp3: {
     title: 'Spatial + Regenerative',
-    wandb: 'pzy2mxod',
+    wandb: '7ybfz89t',
     config: { reward_scale: 1, spatial_scale: 1.0, w_tree: 1.0, w_crop: 3.0, w_built: 3.0, w_buf: 5.0, et_dcs_tolerance: 1, regen_crop: true, learning_rate: 1e-4, total_timesteps: 500_000, max_steps: 500, n_augment: 5 },
   },
 };

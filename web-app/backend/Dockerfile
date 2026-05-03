@@ -32,9 +32,9 @@ COPY data/processed/rl_dataset.npz ./data/processed/rl_dataset.npz
 COPY data/processed/et_per_landcover_2024.json ./data/processed/et_per_landcover_2024.json
 
 # Pre-trained models
-COPY models/6f0ta58i/model.zip ./models/6f0ta58i/model.zip
-COPY models/2sk0pnp3/model.zip ./models/2sk0pnp3/model.zip
-COPY models/pzy2mxod/model.zip ./models/pzy2mxod/model.zip
+COPY models/n2947wpo/model.zip ./models/n2947wpo/model.zip
+COPY models/umgje44z/model.zip ./models/umgje44z/model.zip
+COPY models/7ybfz89t/model.zip ./models/7ybfz89t/model.zip
 
 ENV PYTHONPATH="/app:/app/src"
 

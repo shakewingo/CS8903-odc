@@ -16,7 +16,7 @@ const EXPERIMENTS = [
     label: 'Experiment I',
     title: 'Pure Eco-Value',
     desc: 'Rewards purely by total ecosystem value increase. No spatial reward considered.',
-    wandb: '6f0ta58i',
+    wandb: 'n2947wpo',
     color: '#2E86AB',
     config: {
       reward_scale: 1,
@@ -38,7 +38,7 @@ const EXPERIMENTS = [
     label: 'Experiment II',
     title: 'Eco-Value + Spatial',
     desc: 'Rewards eco-value increase plus spatial rewards: contiguity bonus and water buffer zone penalty.',
-    wandb: '2sk0pnp3',
+    wandb: 'umgje44z',
     color: '#1B6B4A',
     config: {
       reward_scale: 1,
@@ -60,7 +60,7 @@ const EXPERIMENTS = [
     label: 'Experiment III',
     title: 'Spatial + Regenerative',
     desc: 'Same as Exp II, but with regenerative agriculture multiplier (1.35×) applied to crop eco-value.',
-    wandb: 'pzy2mxod',
+    wandb: '7ybfz89t',
     color: '#C49A2A',
     config: {
       reward_scale: 1,
