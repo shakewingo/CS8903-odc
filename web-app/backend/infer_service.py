@@ -12,7 +12,6 @@ from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
 
-import psutil
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -41,14 +40,6 @@ EXPERIMENTS = {
 }
 
 REGEN_CROP_MULTIPLIER = 1.35
-
-_proc = psutil.Process()
-
-
-def _log_rss(label: str):
-    rss_mb = _proc.memory_info().rss / 1e6
-    logger.info(f"RSS {rss_mb:7.1f} MB — {label}")
-
 
 # Only one model in memory at a time to fit in 512MB
 _current_model = None       # (exp_id, model)
@@ -82,9 +73,7 @@ def _get_model(experiment: str):
     Evicts the previous model to save memory.
     """
     global _current_model
-    _log_rss(f"_get_model({experiment}) start")
     from sb3_contrib import MaskablePPO
-    _log_rss("_get_model after sb3 import")
 
     _init_once()
 
@@ -97,7 +86,6 @@ def _get_model(experiment: str):
         logger.info(f"Evicting model {_current_model[0]} from memory")
         _current_model = None
         gc.collect()
-        _log_rss("_get_model after eviction+gc")
 
     run_id = EXPERIMENTS[experiment]
     model_path = PROJECT_ROOT / "models" / run_id / "model.zip"
@@ -105,9 +93,7 @@ def _get_model(experiment: str):
         raise HTTPException(status_code=500, detail=f"Model file not found for {experiment}")
 
     dummy_env = make_env(SimpleNamespace(riparian_mask=True), "test_indices")
-    _log_rss("_get_model after dummy_env")
     model = MaskablePPO.load(str(model_path), env=dummy_env)
-    _log_rss("_get_model after MaskablePPO.load")
     _current_model = (experiment, model)
     logger.info(f"Loaded model for {experiment} (run {run_id})")
     return model
@@ -143,9 +129,7 @@ def _run_cached(lat_r: float, lng_r: float, experiment: str):
     """Run model inference following the ``eval.py:main()`` pattern."""
     from backend.grid_service import get_cached_dataset
 
-    _log_rss(f"enter _run_cached ({experiment})")
     model = _get_model(experiment)
-    _log_rss(f"after model load ({experiment})")
     dataset = get_cached_dataset(lat_r, lng_r)
     # All current checkpoints were trained with --riparian-mask; must match
     # at eval time so the policy sees the same action mask.
@@ -156,7 +140,6 @@ def _run_cached(lat_r: float, lng_r: float, experiment: str):
     combined = {}
     for split in ("test_indices", "train_indices"):
         env = make_env(env_args, split)
-        _log_rss(f"after make_env [{split}]")
         # make_env already called env.reset(), which built env.samples from
         # the static rl_dataset.npz that LandUseEnv loaded at __init__. For
         # the web app's per-request dataset, override env.samples so the
@@ -170,12 +153,10 @@ def _run_cached(lat_r: float, lng_r: float, experiment: str):
         combined.update(
             run_inference(make_act_fn, env, dataset, split)
         )
-        _log_rss(f"after run_inference [{split}]")
 
     # eval.py: reconstruct_map + compute_diff_cells
     initial_obs, final_obs = reconstruct_map(dataset, combined)
     changed_cells = compute_diff_cells(initial_obs, final_obs, atol=1e-4)
-    _log_rss("after reconstruct_map")
 
     # ESV map (exp1 and exp2 uses non-regenerative crop multiplier)
     esv_map = dict(ECO_VALUES)
@@ -200,16 +181,4 @@ def infer(req: InferRequest):
     lat_r = round(req.lat, 6)
     lng_r = round(req.lng, 6)
     logger.info(f"Running inference for {req.experiment} at ({lat_r}, {lng_r})")
-    try:
-        return _run_cached(lat_r, lng_r, req.experiment)
-    except HTTPException:
-        raise
-    except BaseException as e:
-        # Surface non-HTTP errors with a traceback so prod logs show what
-        # raised (vs. the worker just dying with no signal).
-        import traceback
-        logger.error(
-            f"/api/infer raised {type(e).__name__}: {e}\n"
-            + traceback.format_exc()
-        )
-        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+    return _run_cached(lat_r, lng_r, req.experiment)

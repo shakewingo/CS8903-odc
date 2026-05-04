@@ -10,18 +10,3 @@ services:
     envVars:
       - key: PORT
         value: "8000"
-      # Memory hygiene on small Linux instances: cap glibc per-thread
-      # arenas, force aggressive heap trim, and pin BLAS/OMP to a single
-      # thread (we have 1 CPU and inference is light).
-      - key: MALLOC_ARENA_MAX
-        value: "2"
-      - key: MALLOC_TRIM_THRESHOLD_
-        value: "131072"
-      - key: OMP_NUM_THREADS
-        value: "1"
-      - key: MKL_NUM_THREADS
-        value: "1"
-      - key: OPENBLAS_NUM_THREADS
-        value: "1"
-      - key: NUMEXPR_NUM_THREADS
-        value: "1"

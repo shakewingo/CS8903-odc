@@ -1,35 +1,8 @@
 """FastAPI backend for dynamic grid generation and model inference."""
 
-import faulthandler
-import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-
-# Dump a Python traceback to stderr if the process catches SIGSEGV /
-# SIGABRT / SIGFPE — i.e. a native crash from torch/numpy/rasterio.
-# Without this the worker just disappears and Render shows a 502 with
-# no signal in the runtime log.
-faulthandler.enable(all_threads=True)
-
-# Pin BLAS/OMP threads before importing torch/numpy. Inference is light
-# (~25 MaskablePPO episodes per request) and the prod instance has 1 CPU,
-# so multi-threaded BLAS is wasted memory for per-thread arenas. Must be
-# set before the libraries are imported.
-for k in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
-         "NUMEXPR_NUM_THREADS"):
-    os.environ.setdefault(k, "1")
-
-import psutil
-import torch
-
-# Disable MKL-DNN. Render's CPU SKU segfaults inside the GridCNN dummy
-# forward pass during MaskablePPO.load — faulthandler showed the crash
-# in features-extractor __init__, and disabling the MKL-DNN convolution
-# backend takes that code path out of the picture. We're CPU-bound, 1
-# thread, ~25 forward passes per request — the perf cost is irrelevant.
-torch.backends.mkldnn.enabled = False
-torch.set_num_threads(1)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -80,32 +53,6 @@ app.include_router(grid_router, prefix="/api")
 app.include_router(infer_router, prefix="/api")
 
 
-_proc = psutil.Process()
-
-
-def _cgroup_mem_max_mb():
-    """Container memory cap in MB, or None if not running in a cgroup."""
-    for path in ("/sys/fs/cgroup/memory.max",
-                 "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
-        try:
-            with open(path) as f:
-                v = f.read().strip()
-            if v in ("max", ""):
-                return None
-            n = int(v)
-            # cgroup v1 uses a sentinel like 9223372036854771712 for "no limit"
-            if n > 10 ** 15:
-                return None
-            return round(n / 1e6, 1)
-        except OSError:
-            continue
-    return None
-
-
 @app.get("/health")
 def health():
-    return {
-        "status": "ok",
-        "rss_mb": round(_proc.memory_info().rss / 1e6, 1),
-        "cgroup_max_mb": _cgroup_mem_max_mb(),
-    }
+    return {"status": "ok"}

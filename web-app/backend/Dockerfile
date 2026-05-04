@@ -38,20 +38,6 @@ COPY models/7ybfz89t/model.zip ./models/7ybfz89t/model.zip
 
 ENV PYTHONPATH="/app:/app/src"
 
-# Flush prints/logs immediately so we don't lose the last few lines if
-# the worker dies (faulthandler writes to stderr but pipe buffering can
-# eat it).
-ENV PYTHONUNBUFFERED=1
-
-# Memory hygiene on small Linux instances. Must be set before the Python
-# process starts so glibc reads them at init.
-ENV MALLOC_ARENA_MAX=2
-ENV MALLOC_TRIM_THRESHOLD_=131072
-ENV OMP_NUM_THREADS=1
-ENV MKL_NUM_THREADS=1
-ENV OPENBLAS_NUM_THREADS=1
-ENV NUMEXPR_NUM_THREADS=1
-
 EXPOSE 8000
 
 CMD ["python", "-c", "import sys; sys.path.insert(0, 'web-app'); from backend.main import app; import uvicorn; uvicorn.run(app, host='0.0.0.0', port=8000)"]
