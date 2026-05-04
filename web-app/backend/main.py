@@ -66,9 +66,29 @@ app.include_router(infer_router, prefix="/api")
 _proc = psutil.Process()
 
 
+def _cgroup_mem_max_mb():
+    """Container memory cap in MB, or None if not running in a cgroup."""
+    for path in ("/sys/fs/cgroup/memory.max",
+                 "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            with open(path) as f:
+                v = f.read().strip()
+            if v in ("max", ""):
+                return None
+            n = int(v)
+            # cgroup v1 uses a sentinel like 9223372036854771712 for "no limit"
+            if n > 10 ** 15:
+                return None
+            return round(n / 1e6, 1)
+        except OSError:
+            continue
+    return None
+
+
 @app.get("/health")
 def health():
     return {
         "status": "ok",
         "rss_mb": round(_proc.memory_info().rss / 1e6, 1),
+        "cgroup_max_mb": _cgroup_mem_max_mb(),
     }
