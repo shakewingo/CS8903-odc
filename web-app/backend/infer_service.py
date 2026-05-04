@@ -82,7 +82,9 @@ def _get_model(experiment: str):
     Evicts the previous model to save memory.
     """
     global _current_model
+    _log_rss(f"_get_model({experiment}) start")
     from sb3_contrib import MaskablePPO
+    _log_rss("_get_model after sb3 import")
 
     _init_once()
 
@@ -95,6 +97,7 @@ def _get_model(experiment: str):
         logger.info(f"Evicting model {_current_model[0]} from memory")
         _current_model = None
         gc.collect()
+        _log_rss("_get_model after eviction+gc")
 
     run_id = EXPERIMENTS[experiment]
     model_path = PROJECT_ROOT / "models" / run_id / "model.zip"
@@ -102,7 +105,9 @@ def _get_model(experiment: str):
         raise HTTPException(status_code=500, detail=f"Model file not found for {experiment}")
 
     dummy_env = make_env(SimpleNamespace(riparian_mask=True), "test_indices")
+    _log_rss("_get_model after dummy_env")
     model = MaskablePPO.load(str(model_path), env=dummy_env)
+    _log_rss("_get_model after MaskablePPO.load")
     _current_model = (experiment, model)
     logger.info(f"Loaded model for {experiment} (run {run_id})")
     return model
@@ -195,4 +200,16 @@ def infer(req: InferRequest):
     lat_r = round(req.lat, 6)
     lng_r = round(req.lng, 6)
     logger.info(f"Running inference for {req.experiment} at ({lat_r}, {lng_r})")
-    return _run_cached(lat_r, lng_r, req.experiment)
+    try:
+        return _run_cached(lat_r, lng_r, req.experiment)
+    except HTTPException:
+        raise
+    except BaseException as e:
+        # Surface non-HTTP errors with a traceback so prod logs show what
+        # raised (vs. the worker just dying with no signal).
+        import traceback
+        logger.error(
+            f"/api/infer raised {type(e).__name__}: {e}\n"
+            + traceback.format_exc()
+        )
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
