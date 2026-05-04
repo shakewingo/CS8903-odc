@@ -21,6 +21,16 @@ for k in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
     os.environ.setdefault(k, "1")
 
 import psutil
+import torch
+
+# Disable MKL-DNN. Render's CPU SKU segfaults inside the GridCNN dummy
+# forward pass during MaskablePPO.load — faulthandler showed the crash
+# in features-extractor __init__, and disabling the MKL-DNN convolution
+# backend takes that code path out of the picture. We're CPU-bound, 1
+# thread, ~25 forward passes per request — the perf cost is irrelevant.
+torch.backends.mkldnn.enabled = False
+torch.set_num_threads(1)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
