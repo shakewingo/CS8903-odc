@@ -12,6 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
 
+import psutil
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -40,6 +41,14 @@ EXPERIMENTS = {
 }
 
 REGEN_CROP_MULTIPLIER = 1.35
+
+_proc = psutil.Process()
+
+
+def _log_rss(label: str):
+    rss_mb = _proc.memory_info().rss / 1e6
+    logger.info(f"RSS {rss_mb:7.1f} MB — {label}")
+
 
 # Only one model in memory at a time to fit in 512MB
 _current_model = None       # (exp_id, model)
@@ -129,7 +138,9 @@ def _run_cached(lat_r: float, lng_r: float, experiment: str):
     """Run model inference following the ``eval.py:main()`` pattern."""
     from backend.grid_service import get_cached_dataset
 
+    _log_rss(f"enter _run_cached ({experiment})")
     model = _get_model(experiment)
+    _log_rss(f"after model load ({experiment})")
     dataset = get_cached_dataset(lat_r, lng_r)
     # All current checkpoints were trained with --riparian-mask; must match
     # at eval time so the policy sees the same action mask.
@@ -140,6 +151,7 @@ def _run_cached(lat_r: float, lng_r: float, experiment: str):
     combined = {}
     for split in ("test_indices", "train_indices"):
         env = make_env(env_args, split)
+        _log_rss(f"after make_env [{split}]")
         # make_env already called env.reset(), which built env.samples from
         # the static rl_dataset.npz that LandUseEnv loaded at __init__. For
         # the web app's per-request dataset, override env.samples so the
@@ -153,10 +165,12 @@ def _run_cached(lat_r: float, lng_r: float, experiment: str):
         combined.update(
             run_inference(make_act_fn, env, dataset, split)
         )
+        _log_rss(f"after run_inference [{split}]")
 
     # eval.py: reconstruct_map + compute_diff_cells
     initial_obs, final_obs = reconstruct_map(dataset, combined)
     changed_cells = compute_diff_cells(initial_obs, final_obs, atol=1e-4)
+    _log_rss("after reconstruct_map")
 
     # ESV map (exp1 and exp2 uses non-regenerative crop multiplier)
     esv_map = dict(ECO_VALUES)

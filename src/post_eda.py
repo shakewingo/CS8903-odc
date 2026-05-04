@@ -744,26 +744,62 @@ def compute_value_grid(
     meta : dict
         Grid-level metadata including ``"value_key"``.
     """
-    nodata, src_crs, ds_h, ds_w, data, ds_transform, to_latlon = load_landcover_data(
-        year, sample_rate
-    )
-
-    # Convert centre lat/lon → pixel coords in the downsampled grid
-    to_projected = pyproj.Transformer.from_crs("EPSG:4326", src_crs, always_xy=True)
-    cx, cy = to_projected.transform(center_lon, center_lat)
-    inv_transform = ~ds_transform
-    center_col, center_row = inv_transform * (cx, cy)
-    center_row, center_col = int(center_row), int(center_col)
-
-    # Compute offsets so the grid is centred on that pixel
+    # Window-read: pull only the n_rows*grid_size × n_cols*grid_size patch we
+    # need around the user's centre, instead of materialising the whole
+    # downsampled raster (which spikes RSS by ~1 GB on the Malawi GeoTIFF).
+    lc_path = Path(data_dir, "processed", f"malawi_masked_{year}.tif")
+    upsample = int(round(1.0 / sample_rate))
     total_px_rows = n_rows * grid_size
     total_px_cols = n_cols * grid_size
-    row_offset = center_row - total_px_rows // 2
-    col_offset = center_col - total_px_cols // 2
 
-    # Clamp to raster bounds
-    row_offset = max(0, min(row_offset, ds_h - total_px_rows))
-    col_offset = max(0, min(col_offset, ds_w - total_px_cols))
+    with rasterio.open(lc_path) as src:
+        nodata = src.nodata
+        src_crs = src.crs
+        src_h, src_w = src.height, src.width
+        # Match load_landcover_data's ds dimensions for an identical
+        # ds_transform / coordinate frame.
+        ds_h = int(src_h * sample_rate)
+        ds_w = int(src_w * sample_rate)
+        ds_transform = src.transform * Affine.scale(
+            src_w / ds_w, src_h / ds_h,
+        )
+
+        # Convert centre lat/lon → pixel coords in the downsampled grid
+        to_projected = pyproj.Transformer.from_crs(
+            "EPSG:4326", src_crs, always_xy=True,
+        )
+        cx, cy = to_projected.transform(center_lon, center_lat)
+        inv_transform = ~ds_transform
+        center_col, center_row = inv_transform * (cx, cy)
+        center_row, center_col = int(center_row), int(center_col)
+
+        # Compute offsets so the grid is centred on that pixel
+        row_offset = center_row - total_px_rows // 2
+        col_offset = center_col - total_px_cols // 2
+
+        # Clamp to raster bounds
+        row_offset = max(0, min(row_offset, ds_h - total_px_rows))
+        col_offset = max(0, min(col_offset, ds_w - total_px_cols))
+
+        # Read only the source-raster window covering this patch and
+        # downsample it on the fly. Mode resampling is local
+        # (each output pixel = mode of upsample×upsample source pixels),
+        # so windowing-then-resampling matches resampling-then-windowing.
+        src_window = Window(
+            col_offset * upsample, row_offset * upsample,
+            total_px_cols * upsample, total_px_rows * upsample,
+        )
+        data = src.read(
+            1,
+            window=src_window,
+            out_shape=(total_px_rows, total_px_cols),
+            resampling=Resampling.mode,
+        )
+
+    to_latlon = pyproj.Transformer.from_crs(
+        src_crs, "EPSG:4326", always_xy=True,
+    )
+
     logger.info(
         f"[{value_key}] Grid centred on ({center_lat:.4f}, {center_lon:.4f}) → "
         f"pixel ({center_row}, {center_col}), origin ({row_offset}, {col_offset}), "
@@ -773,11 +809,13 @@ def compute_value_grid(
     grid: list[list[dict | None]] = []
     for gr in range(n_rows):
         row_cells = []
-        r0 = row_offset + gr * grid_size
-        r1 = min(r0 + grid_size, ds_h)
+        # data is the window covering exactly (total_px_rows, total_px_cols);
+        # iterate with window-relative indices.
+        r0 = gr * grid_size
+        r1 = r0 + grid_size
         for gc in range(n_cols):
-            c0 = col_offset + gc * grid_size
-            c1 = min(c0 + grid_size, ds_w)
+            c0 = gc * grid_size
+            c1 = c0 + grid_size
 
             block = data[r0:r1, c0:c1]
             valid = (

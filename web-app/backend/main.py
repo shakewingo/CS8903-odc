@@ -4,6 +4,7 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import psutil
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -53,6 +54,12 @@ app.include_router(grid_router, prefix="/api")
 app.include_router(infer_router, prefix="/api")
 
 
+_proc = psutil.Process()
+
+
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "rss_mb": round(_proc.memory_info().rss / 1e6, 1),
+    }

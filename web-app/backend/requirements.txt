@@ -17,3 +17,4 @@ pandas>=2.2
 matplotlib>=3.9
 planetary-computer>=1.0
 pystac-client>=0.8
+psutil>=5.9
