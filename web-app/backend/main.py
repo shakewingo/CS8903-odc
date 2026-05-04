@@ -1,8 +1,17 @@
 """FastAPI backend for dynamic grid generation and model inference."""
 
+import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+# Pin BLAS/OMP threads before importing torch/numpy. Inference is light
+# (~25 MaskablePPO episodes per request) and the prod instance has 1 CPU,
+# so multi-threaded BLAS is wasted memory for per-thread arenas. Must be
+# set before the libraries are imported.
+for k in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+         "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(k, "1")
 
 import psutil
 from fastapi import FastAPI
