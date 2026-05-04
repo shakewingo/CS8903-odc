@@ -1,17 +1,23 @@
-# CPU-only PyTorch (saves ~1.5GB image size + ~500MB RAM vs full torch)
+# Versions pinned to match the training environment recorded in
+# models/<run_id>/model.zip:system_info.txt (torch 2.10.0, sb3 2.7.1,
+# cloudpickle 3.1.2, gymnasium 1.2.3, numpy 2.4.1). Mismatched torch
+# versions cause MaskablePPO.load to segfault in features-extractor
+# __init__ when cloudpickle's skeleton class hits torch C-level APIs
+# whose internals changed between releases.
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.7.0+cpu
+torch==2.10.0+cpu
 
 fastapi>=0.115
 uvicorn[standard]>=0.34
-numpy>=1.26
+numpy==2.4.1
 rasterio>=1.4
 pyproj>=3.7
 shapely>=2.0
-stable-baselines3>=2.4
-sb3-contrib>=2.4
+stable-baselines3==2.7.1
+sb3-contrib==2.7.1
+cloudpickle==3.1.2
 scipy>=1.14
-gymnasium>=1.0
+gymnasium==1.2.3
 scikit-learn>=1.5
 pandas>=2.2
 matplotlib>=3.9
