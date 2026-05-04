@@ -1,7 +1,7 @@
 # Build context: repo root (CS8903-odc/)
 # docker build -f web-app/backend/Dockerfile -t cs8903-backend .
 
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 # Install GDAL and build dependencies for rasterio, then clean up
 RUN apt-get update && apt-get install -y --no-install-recommends \
