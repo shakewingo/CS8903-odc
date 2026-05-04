@@ -1,9 +1,16 @@
 """FastAPI backend for dynamic grid generation and model inference."""
 
+import faulthandler
 import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+# Dump a Python traceback to stderr if the process catches SIGSEGV /
+# SIGABRT / SIGFPE — i.e. a native crash from torch/numpy/rasterio.
+# Without this the worker just disappears and Render shows a 502 with
+# no signal in the runtime log.
+faulthandler.enable(all_threads=True)
 
 # Pin BLAS/OMP threads before importing torch/numpy. Inference is light
 # (~25 MaskablePPO episodes per request) and the prod instance has 1 CPU,

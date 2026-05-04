@@ -38,6 +38,11 @@ COPY models/7ybfz89t/model.zip ./models/7ybfz89t/model.zip
 
 ENV PYTHONPATH="/app:/app/src"
 
+# Flush prints/logs immediately so we don't lose the last few lines if
+# the worker dies (faulthandler writes to stderr but pipe buffering can
+# eat it).
+ENV PYTHONUNBUFFERED=1
+
 # Memory hygiene on small Linux instances. Must be set before the Python
 # process starts so glibc reads them at init.
 ENV MALLOC_ARENA_MAX=2
